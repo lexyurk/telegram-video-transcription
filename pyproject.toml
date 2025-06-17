@@ -1,0 +1,106 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "telegram-video-transcription"
+version = "0.1.0"
+description = "Telegram bot for video/audio transcription using Deepgram and Claude AI"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot>=20.7",
+    "deepgram-sdk>=3.2.7",
+    "anthropic>=0.8.1",
+    "python-dotenv>=1.0.0",
+    "aiofiles>=23.2.1",
+    "aiohttp>=3.9.1",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "loguru>=0.7.2",
+    "telethon>=1.40.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.12.0",
+    "ruff>=0.1.8",
+    "mypy>=1.8.0",
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "types-aiofiles>=23.2.0.20240106",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+strict_equality = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/telegram_bot"]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.0.0",
+]

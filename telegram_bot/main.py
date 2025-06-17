@@ -6,8 +6,8 @@ import sys
 
 from loguru import logger
 
-from .bot import TelegramTranscriptionBot
-from .config import get_settings
+from telegram_bot.bot import TelegramTranscriptionBot
+from telegram_bot.config import get_settings
 
 
 def setup_logging() -> None:

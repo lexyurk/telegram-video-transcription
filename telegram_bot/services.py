@@ -8,7 +8,7 @@ from anthropic import AsyncAnthropic
 from deepgram import DeepgramClient, PrerecordedOptions
 from loguru import logger
 
-from .config import get_settings
+from telegram_bot.config import get_settings
 
 
 class TranscriptionService:

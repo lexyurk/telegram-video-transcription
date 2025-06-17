@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, mock_open, patch
 
 import pytest
 
-from src.telegram_bot.services import FileService
+from telegram_bot.services import FileService
 
 
 class TestFileService:
@@ -16,7 +16,7 @@ class TestFileService:
         content = b"test content"
         extension = ".txt"
 
-        with patch("src.telegram_bot.services.get_settings") as mock_settings:
+        with patch("telegram_bot.services.get_settings") as mock_settings:
             mock_settings.return_value.temp_dir = "/tmp"
 
             with patch("tempfile.NamedTemporaryFile") as mock_temp:
@@ -36,7 +36,7 @@ class TestFileService:
         content = "test content"
         filename = "test.txt"
 
-        with patch("src.telegram_bot.services.get_settings") as mock_settings:
+        with patch("telegram_bot.services.get_settings") as mock_settings:
             mock_settings.return_value.temp_dir = "/tmp"
 
             # Create a proper async context manager mock

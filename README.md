@@ -51,7 +51,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 
 3. **Set up environment variables**:
    ```bash
-   cp env_template.txt .env
+   cp .env.example .env
    # Edit .env with your API keys
    ```
 
@@ -177,7 +177,7 @@ uv run pytest
 
 ```
 telegram-video-transcription/
-├── src/telegram_bot/
+├── telegram_bot/
 │   ├── __init__.py
 │   ├── main.py                 # Entry point
 │   ├── bot.py                  # Main bot logic
@@ -188,7 +188,7 @@ telegram-video-transcription/
 ├── main.py                     # Root entry point
 ├── pyproject.toml              # Project configuration
 ├── Dockerfile                  # Docker configuration
-├── env_template.txt            # Environment variables template
+├── .env.example                # Environment variables template
 └── README.md                   # This file
 ```
 

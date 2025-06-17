@@ -11,7 +11,7 @@ from loguru import logger
 from telethon import TelegramClient
 from telethon.tl.types import Document, DocumentAttributeFilename
 
-from .config import get_settings
+from telegram_bot.config import get_settings
 
 
 class MTProtoDownloader:

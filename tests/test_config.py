@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.telegram_bot.config import Settings
+from telegram_bot.config import Settings
 
 
 def test_settings_default_values():

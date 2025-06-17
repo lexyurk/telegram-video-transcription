@@ -13,9 +13,9 @@ from telegram.ext import (
     filters,
 )
 
-from .config import get_settings
-from .services import FileService, SummarizationService, TranscriptionService
-from .mtproto_downloader import MTProtoDownloader
+from telegram_bot.config import get_settings
+from telegram_bot.services import FileService, SummarizationService, TranscriptionService
+from telegram_bot.mtproto_downloader import MTProtoDownloader
 
 
 class TelegramTranscriptionBot:

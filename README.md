@@ -5,7 +5,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 ## Features
 
 - 🎥 **Video & Audio Transcription**: Supports multiple formats (MP4, AVI, MOV, MP3, WAV, etc.)
-- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and Claude AI for summaries
+- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and Claude AI for summaries (responds in the same language as input)
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations
 - ✨ **Smart Formatting**: Automatic punctuation, paragraphs, and number formatting
@@ -179,17 +179,20 @@ uv run pytest
 telegram-video-transcription/
 ├── telegram_bot/
 │   ├── __init__.py
-│   ├── main.py                 # Entry point
-│   ├── bot.py                  # Main bot logic
-│   ├── config.py               # Configuration management
-│   ├── services.py             # External API services
-│   └── mtproto_downloader.py   # Large file downloader via MTProto
-├── tests/                      # Test files
-├── main.py                     # Root entry point
-├── pyproject.toml              # Project configuration
-├── Dockerfile                  # Docker configuration
-├── .env.example                # Environment variables template
-└── README.md                   # This file
+│   ├── main.py                    # Entry point
+│   ├── bot.py                     # Main bot logic
+│   ├── config.py                  # Configuration management
+│   ├── services.py                # Service imports (backward compatibility)
+│   ├── transcription_service.py   # Deepgram transcription service
+│   ├── summarization_service.py   # Claude AI summarization service
+│   ├── file_service.py            # File operations service
+│   └── mtproto_downloader.py      # Large file downloader via MTProto
+├── tests/                         # Test files
+├── main.py                        # Root entry point
+├── pyproject.toml                 # Project configuration
+├── Dockerfile                     # Docker configuration
+├── .env.example                   # Environment variables template
+└── README.md                      # This file
 ```
 
 ## API Documentation

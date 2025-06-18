@@ -1,11 +1,11 @@
 # Telegram Video Transcription Bot
 
-A Telegram bot that transcribes video and audio files using Deepgram AI and creates summaries with action points using Claude AI (Anthropic).
+A Telegram bot that transcribes video and audio files using Deepgram AI and creates summaries with action points using AI models (Google Gemini 2.5 Flash by default, with Claude AI support).
 
 ## Features
 
 - 🎥 **Video & Audio Transcription**: Supports multiple formats (MP4, AVI, MOV, MP3, WAV, etc.)
-- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and Claude AI for summaries (responds in the same language as input)
+- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and AI models for summaries (Gemini 2.5 Flash by default, Claude support available)
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations
 - 👥 **Smart Speaker Names**: AI-powered detection of actual speaker names from conversations
@@ -35,14 +35,14 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 3. **Transcription**: Deepgram Nova-2 with speaker diarization and smart formatting
 4. **Speaker Identification**: AI analyzes conversation to identify actual speaker names
 5. **Name Replacement**: Replaces "Speaker 0" with real names like "Alexander"
-6. **Summarization**: Claude AI creates summaries with action points in the same language
+6. **Summarization**: AI creates summaries with action points in the same language (Gemini 2.5 Flash by default)
 7. **Delivery**: Sends transcript file and formatted summary
 
 ### Speaker Identification
 
 The bot includes an intelligent speaker identification system:
 
-- **AI-Powered Name Detection**: Uses Claude AI to analyze conversations and identify actual speaker names
+- **AI-Powered Name Detection**: Uses AI models to analyze conversations and identify actual speaker names
 - **Automatic Replacement**: Replaces generic "Speaker 0", "Speaker 1" labels with real names
 - **Context-Aware**: Analyzes how speakers address each other and introduce themselves  
 - **Fallback Handling**: If names can't be identified, keeps original speaker labels
@@ -55,7 +55,9 @@ The bot includes an intelligent speaker identification system:
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 - **Telegram API Credentials** (from [my.telegram.org](https://my.telegram.org/auth)) - Required for large file downloads
 - [Deepgram API Key](https://deepgram.com/)
-- [Anthropic API Key](https://console.anthropic.com/)
+- **AI Model API Key** (choose one):
+  - [Google API Key](https://makersuite.google.com/app/apikey) for Gemini (default)
+  - [Anthropic API Key](https://console.anthropic.com/) for Claude (alternative)
 
 ## Installation
 
@@ -105,32 +107,40 @@ The bot includes an intelligent speaker identification system:
      -e TELEGRAM_API_ID=your_api_id \
      -e TELEGRAM_API_HASH=your_api_hash \
      -e DEEPGRAM_API_KEY=your_key \
-     -e ANTHROPIC_API_KEY=your_key \
+     -e GOOGLE_API_KEY=your_gemini_key \
      telegram-transcription-bot
    ```
 
-### Using Docker Compose
+### Using Docker Compose (Recommended)
 
-1. **Create docker-compose.yml**:
-   ```yaml
-   version: '3.8'
-   services:
-     telegram-bot:
-       build: .
-       environment:
-         - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-         - TELEGRAM_API_ID=${TELEGRAM_API_ID}
-         - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
-         - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
-         - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-       volumes:
-         - ./temp:/app/temp
-       restart: unless-stopped
+1. **Create .env file** with your API keys:
+   ```bash
+   # Required
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   TELEGRAM_API_ID=your_telegram_api_id
+   TELEGRAM_API_HASH=your_telegram_api_hash
+   DEEPGRAM_API_KEY=your_deepgram_key
+   
+   # AI Models (at least one required)
+   GOOGLE_API_KEY=your_google_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   
+   # Optional (defaults shown)
+   MAX_FILE_SIZE_MB=2048
+   LOG_LEVEL=INFO
+   DEEPGRAM_MODEL=nova-2
+   GEMINI_MODEL=gemini-2.5-flash
+   CLAUDE_MODEL=claude-sonnet-4-20250514
    ```
 
 2. **Run with Docker Compose**:
    ```bash
-   docker-compose up -d
+   docker-compose up --build -d
+   ```
+
+3. **View logs**:
+   ```bash
+   docker-compose logs -f
    ```
 
 ## Configuration
@@ -143,7 +153,8 @@ The bot includes an intelligent speaker identification system:
 | `TELEGRAM_API_ID` | Telegram API ID from my.telegram.org | Required |
 | `TELEGRAM_API_HASH` | Telegram API Hash from my.telegram.org | Required |
 | `DEEPGRAM_API_KEY` | Deepgram API key for transcription | Required |
-| `ANTHROPIC_API_KEY` | Anthropic API key for summarization | Required |
+| `GOOGLE_API_KEY` | Google API key for Gemini models (auto-detected) | Optional |
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models (auto-detected) | Optional |
 | `MAX_FILE_SIZE_MB` | Maximum file size in MB | 2048 (2GB) |
 | `TEMP_DIR` | Directory for temporary files | ./temp |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
@@ -152,8 +163,8 @@ The bot includes an intelligent speaker identification system:
 | `ENABLE_PUNCTUATION` | Enable automatic punctuation | true |
 | `ENABLE_PARAGRAPHS` | Enable paragraph formatting | true |
 | `ENABLE_SMART_FORMAT` | Enable smart formatting | true |
+| `GEMINI_MODEL` | Gemini model to use | gemini-2.5-flash |
 | `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-20250514 |
-| `CLAUDE_MAX_TOKENS` | Maximum tokens for Claude response | 4000 |
 
 ## Usage
 
@@ -205,11 +216,11 @@ telegram-video-transcription/
 │   ├── main.py                    # Entry point
 │   ├── bot.py                     # Main bot logic
 │   ├── config.py                  # Configuration management
-│   ├── services.py                # Service imports (backward compatibility)
 │   ├── services/                  # Services package
 │   │   ├── __init__.py           # Services package init
 │   │   ├── transcription_service.py      # Deepgram transcription service
-│   │   ├── summarization_service.py      # Claude AI summarization service
+│   │   ├── ai_model.py                   # AI model abstraction (Gemini/Claude)
+│   │   ├── summarization_service.py      # AI summarization service
 │   │   ├── speaker_identification_service.py # AI speaker name identification
 │   │   └── file_service.py               # File operations service
 │   └── mtproto_downloader.py      # Large file downloader via MTProto
@@ -228,10 +239,15 @@ telegram-video-transcription/
 - **Docs**: https://developers.deepgram.com/
 - **Models**: Nova-2 (default), Whisper, etc.
 
-### Anthropic Claude
+### Google Gemini (Default AI Provider)
+- **Website**: https://ai.google.dev/
+- **Docs**: https://ai.google.dev/docs
+- **Models**: Gemini-2.5-Flash (default), Gemini-1.5-Pro, etc.
+
+### Anthropic Claude (Alternative AI Provider)
 - **Website**: https://www.anthropic.com/
 - **Docs**: https://docs.anthropic.com/
-- **Models**: Claude-4-Sonnet (default), Claude-3.5-Sonnet, Claude-3-Haiku, etc.
+- **Models**: Claude-4-Sonnet, Claude-3.5-Sonnet, Claude-3-Haiku, etc.
 
 ## Contributing
 
@@ -254,6 +270,13 @@ For issues and questions:
 4. Check file format compatibility
 
 ## Changelog
+
+### v0.2.0
+- **NEW**: AI Model Selection - Automatic detection between Google Gemini 2.5 Flash (priority) and Claude AI
+- **NEW**: Google Gemini 2.5 Flash support with faster processing and improved quality  
+- **IMPROVED**: Clean AI model abstraction with separate services architecture
+- **SIMPLIFIED**: No manual model selection - automatically uses available API keys (Gemini priority)
+- **ENHANCED**: Comprehensive test coverage for AI model abstraction (25+ tests)
 
 ### v0.1.0
 - Initial release

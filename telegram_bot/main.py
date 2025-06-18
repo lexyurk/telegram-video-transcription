@@ -68,7 +68,7 @@ async def main() -> None:
         logger.info("Bot stopped by user")
     except Exception as e:
         logger.error(f"Fatal error: {e}")
-        sys.exit(1)
+        raise
 
 
 if __name__ == "__main__":

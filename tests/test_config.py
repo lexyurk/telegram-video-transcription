@@ -18,7 +18,7 @@ def test_settings_default_values():
             "TELEGRAM_API_ID": "123456",
             "TELEGRAM_API_HASH": "test_hash",
             "DEEPGRAM_API_KEY": "test_deepgram",
-            "ANTHROPIC_API_KEY": "test_anthropic",
+            "GOOGLE_API_KEY": "test_google",
         },
     ):
         settings = Settings()
@@ -30,8 +30,12 @@ def test_settings_default_values():
         assert settings.enable_diarization is True
         assert settings.enable_punctuation is True
         assert settings.enable_smart_format is True
+        # AI model defaults
+        assert settings.gemini_model == "gemini-2.5-flash"
         assert settings.claude_model == "claude-sonnet-4-20250514"
-        assert settings.claude_max_tokens == 4000
+        # API keys
+        assert settings.google_api_key == "test_google"
+        assert settings.anthropic_api_key == ""  # Default empty
 
 
 def test_settings_required_fields():
@@ -50,18 +54,76 @@ def test_settings_custom_values():
             "TELEGRAM_API_ID": "123456",
             "TELEGRAM_API_HASH": "test_hash",
             "DEEPGRAM_API_KEY": "custom_deepgram",
+            "GOOGLE_API_KEY": "custom_google",
             "ANTHROPIC_API_KEY": "custom_anthropic",
             "MAX_FILE_SIZE_MB": "100",
             "LOG_LEVEL": "DEBUG",
             "DEEPGRAM_MODEL": "whisper",
-            "CLAUDE_MAX_TOKENS": "2000",
+            "GEMINI_MODEL": "gemini-1.5-pro",
+            "CLAUDE_MODEL": "claude-3.5-sonnet",
         },
     ):
         settings = Settings()
         assert settings.telegram_bot_token == "custom_token"
         assert settings.deepgram_api_key == "custom_deepgram"
+        assert settings.google_api_key == "custom_google"
         assert settings.anthropic_api_key == "custom_anthropic"
         assert settings.max_file_size_mb == 100
         assert settings.log_level == "DEBUG"
         assert settings.deepgram_model == "whisper"
-        assert settings.claude_max_tokens == 2000
+        assert settings.gemini_model == "gemini-1.5-pro"
+        assert settings.claude_model == "claude-3.5-sonnet"
+
+
+def test_ai_model_creation_gemini_priority():
+    """Test that Gemini is chosen when both API keys are provided."""
+    with patch.dict(
+        os.environ,
+        {
+            "TELEGRAM_BOT_TOKEN": "test_token",
+            "TELEGRAM_API_ID": "123456",
+            "TELEGRAM_API_HASH": "test_hash",
+            "DEEPGRAM_API_KEY": "test_deepgram",
+            "GOOGLE_API_KEY": "test_google",
+            "ANTHROPIC_API_KEY": "test_anthropic",
+        },
+    ):
+        from telegram_bot.services.ai_model import create_ai_model, GeminiModel
+        
+        ai_model = create_ai_model()
+        assert isinstance(ai_model, GeminiModel)
+
+
+def test_ai_model_creation_claude_fallback():
+    """Test that Claude is chosen when only Claude API key is provided."""
+    with patch.dict(
+        os.environ,
+        {
+            "TELEGRAM_BOT_TOKEN": "test_token",
+            "TELEGRAM_API_ID": "123456",
+            "TELEGRAM_API_HASH": "test_hash",
+            "DEEPGRAM_API_KEY": "test_deepgram",
+            "ANTHROPIC_API_KEY": "test_anthropic",
+        },
+    ):
+        from telegram_bot.services.ai_model import create_ai_model, ClaudeModel
+        
+        ai_model = create_ai_model()
+        assert isinstance(ai_model, ClaudeModel)
+
+
+def test_ai_model_creation_no_keys():
+    """Test that error is raised when no AI API keys are provided."""
+    with patch.dict(
+        os.environ,
+        {
+            "TELEGRAM_BOT_TOKEN": "test_token",
+            "TELEGRAM_API_ID": "123456", 
+            "TELEGRAM_API_HASH": "test_hash",
+            "DEEPGRAM_API_KEY": "test_deepgram",
+        },
+    ):
+        from telegram_bot.services.ai_model import create_ai_model
+        
+        with pytest.raises(ValueError, match="No AI model API key provided"):
+            create_ai_model()

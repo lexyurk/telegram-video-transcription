@@ -1,5 +1,6 @@
 """Transcription service for handling Deepgram transcription."""
 
+import asyncio
 import aiofiles
 from deepgram import DeepgramClient, PrerecordedOptions
 from loguru import logger
@@ -14,6 +15,7 @@ class TranscriptionService:
         """Initialize the transcription service."""
         settings = get_settings()
         self.client = DeepgramClient(settings.deepgram_api_key)
+        self.timeout_seconds = settings.deepgram_timeout_seconds
 
     async def transcribe_audio(self, file_path: str) -> str | None:
         """
@@ -27,53 +29,69 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            # Configure Deepgram options with advanced features
-            # Language detection is automatic - no need to specify language
+            
+            # Configure Deepgram options with speaker diarization
             options = PrerecordedOptions(
                 model=settings.deepgram_model,
-                # Enable automatic language detection
                 detect_language=True,
-                # Advanced formatting features
                 smart_format=settings.enable_smart_format,
                 punctuate=settings.enable_punctuation,
                 paragraphs=settings.enable_paragraphs,
-                utterances=settings.enable_utterances,
-                # Speaker identification
                 diarize=settings.enable_diarization,
-                # Additional features
-                filler_words=settings.enable_filler_words,
-                profanity_filter=settings.enable_profanity_filter,
-                redact=settings.enable_redaction,
-                # Enhanced metadata
-                keywords=True,
-                numerals=True,
-                measurements=True,
+                utterances=settings.enable_utterances,  # Required for speaker-labeled segments
             )
 
-            # Read the file
+            # Read the file and create payload similar to the working example
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
 
-            # Create a payload
+            # Create payload in the format expected by Deepgram
             payload = {"buffer": buffer_data}
 
-            # Transcribe the audio
-            response = self.client.listen.prerecorded.v("1").transcribe_file(
-                payload, options
+            logger.info(f"Starting transcription for file: {file_path} ({len(buffer_data)} bytes)")
+
+            # Use the synchronous client wrapped in asyncio.to_thread for better compatibility
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client.listen.prerecorded.v("1").transcribe_file,
+                    payload,
+                    options
+                ),
+                timeout=self.timeout_seconds
             )
 
+            logger.info("Received response from Deepgram, processing...")
+            
+            # Convert Deepgram response object to dict if needed
+            if hasattr(response, 'to_dict'):
+                response = response.to_dict()
+            elif hasattr(response, '__dict__'):
+                response = response.__dict__
+
             # Extract enhanced transcript with speaker information
+            if "results" not in response:
+                logger.error(f"No 'results' key in response. Available keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
+                return None
+                
+            if not response["results"]["channels"]:
+                logger.error("No channels in response results")
+                return None
+                
             result = response["results"]["channels"][0]["alternatives"][0]
             
             # Check if we have utterances (with speaker diarization)
-            if "utterances" in response["results"] and response["results"]["utterances"]:
+            if ("utterances" in response["results"] and 
+                response["results"]["utterances"] and 
+                len(response["results"]["utterances"]) > 0):
                 # Format transcript with speaker labels
                 formatted_transcript = self._format_transcript_with_speakers(
                     response["results"]["utterances"]
                 )
+                logger.info(f"Found {len(response['results']['utterances'])} utterances with speaker diarization")
             else:
                 # Fallback to basic transcript
-                formatted_transcript = result["transcript"]
+                formatted_transcript = result.get("transcript", "")
+                logger.info("No utterances found, using basic transcript")
 
             if not formatted_transcript.strip():
                 logger.warning("Empty transcript received from Deepgram")
@@ -84,8 +102,11 @@ class TranscriptionService:
             )
             return formatted_transcript
 
+        except asyncio.TimeoutError:
+            logger.error(f"Transcription timed out after {self.timeout_seconds} seconds")
+            return None
         except Exception as e:
-            logger.error(f"Error transcribing audio: {e}")
+            logger.error(f"Error transcribing audio: {e}", exc_info=True)
             return None
 
     def _format_transcript_with_speakers(self, utterances: list) -> str:

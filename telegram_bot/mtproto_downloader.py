@@ -111,7 +111,7 @@ class MTProtoDownloader:
             # For now, let's implement a basic version that works with the file_id
             # In a real implementation, you'd need to store message info when receiving files
             
-            logger.warning("MTProto download not fully implemented - falling back to Bot API")
+            logger.error("MTProto download method not implemented for this file type")
             return None
             
         except Exception as e:

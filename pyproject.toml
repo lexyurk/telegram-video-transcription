@@ -12,6 +12,7 @@ dependencies = [
     "python-telegram-bot>=20.7",
     "deepgram-sdk>=3.2.7",
     "anthropic>=0.8.1",
+    "google-genai>=1.0.0",
     "python-dotenv>=1.0.0",
     "aiofiles>=23.2.1",
     "aiohttp>=3.9.1",

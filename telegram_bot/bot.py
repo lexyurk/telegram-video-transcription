@@ -1,5 +1,6 @@
 """Main Telegram bot implementation with MTProto support for large files."""
 
+import asyncio
 import os
 from datetime import datetime
 
@@ -14,7 +15,12 @@ from telegram.ext import (
 )
 
 from telegram_bot.config import get_settings
-from telegram_bot.services import FileService, SummarizationService, TranscriptionService, SpeakerIdentificationService
+from telegram_bot.services import (
+    FileService,
+    TranscriptionService, 
+    SummarizationService,
+    SpeakerIdentificationService,
+)
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 
 
@@ -25,8 +31,8 @@ class TelegramTranscriptionBot:
         """Initialize the bot with services."""
         self.transcription_service = TranscriptionService()
         self.summarization_service = SummarizationService()
-        self.file_service = FileService()
         self.speaker_identification_service = SpeakerIdentificationService()
+        self.file_service = FileService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -43,10 +49,15 @@ class TelegramTranscriptionBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle the /start command."""
-        welcome_message = """
+        settings = get_settings()
+        
+        # Determine which AI model is being used
+        ai_provider = "Gemini 2.5 Flash" if settings.google_api_key else "Claude AI"
+        
+        welcome_message = f"""
 🎥 **Video/Audio Transcription Bot** 🎙️
 
-Welcome! I can transcribe your video and audio files and create summaries with action points.
+Welcome! I can transcribe your video and audio files and create summaries with action points using {ai_provider}.
 
 **How it works:**
 1. Send me any video or audio file (up to 2GB!)
@@ -73,30 +84,79 @@ Just send me a file and I'll handle the rest! 🚀
         """Handle the /help command."""
         await self.start_command(update, context)
 
-    async def handle_document(
+    async def handle_file(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle document/file uploads with large file support up to 2GB."""
-        document: Document = update.message.document
+        """Handle file uploads (documents, audio, video) with large file support up to 2GB."""
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
 
-        logger.info(f"User {user_id} uploaded file: {document.file_name}")
+        # Get file info from different message types
+        file_obj = None
+        file_name = None
+        file_size = None
+        file_id = None
+
+        if update.message.document:
+            file_obj = update.message.document
+            file_name = file_obj.file_name
+            file_size = file_obj.file_size
+            file_id = file_obj.file_id
+        elif update.message.audio:
+            file_obj = update.message.audio
+            file_name = file_obj.file_name or f"audio_{file_obj.file_id[:8]}.{file_obj.mime_type.split('/')[-1] if file_obj.mime_type else 'mp3'}"
+            file_size = file_obj.file_size
+            file_id = file_obj.file_id
+        elif update.message.video:
+            file_obj = update.message.video
+            file_name = file_obj.file_name or f"video_{file_obj.file_id[:8]}.mp4"
+            file_size = file_obj.file_size
+            file_id = file_obj.file_id
+        elif update.message.voice:
+            file_obj = update.message.voice
+            file_name = f"voice_{file_obj.file_id[:8]}.ogg"
+            file_size = file_obj.file_size
+            file_id = file_obj.file_id
+        elif update.message.video_note:
+            file_obj = update.message.video_note
+            file_name = f"video_note_{file_obj.file_id[:8]}.mp4"
+            file_size = file_obj.file_size
+            file_id = file_obj.file_id
+        else:
+            await update.message.reply_text(
+                "❌ No supported file found! Please send a video or audio file.",
+                parse_mode="Markdown",
+            )
+            return
+
+        logger.info(f"User {user_id} uploaded file: {file_name}")
+        logger.debug(f"File details - Name: {file_name}, Size: {file_size}, ID: {file_id}")
 
         # Check file type first
-        if not self._is_supported_file_type(document.file_name):
+        if not self._is_supported_file_type(file_name):
             await update.message.reply_text(
                 "❌ Unsupported file format! Please send a video or audio file.\n\n"
                 "**Supported formats:**\n"
                 "• Video: MP4, AVI, MOV, MKV, WMV, WebM\n"
-                "• Audio: MP3, WAV, AAC, FLAC, OGG, M4A",
+                "• Audio: MP3, WAV, AAC, FLAC, OGG, M4A\n"
+                "• Voice messages and video notes are also supported!",
                 parse_mode="Markdown",
             )
             return
 
         # Check file size 
-        file_size_mb = document.file_size / (1024 * 1024)
+        if file_size is None or file_size == 0:
+            logger.warning(f"File size is None or 0 for file: {file_name}")
+            await update.message.reply_text(
+                f"⚠️ **Cannot determine file size**\n\n"
+                f"Unable to get file size information. This might be a temporary issue.\n"
+                f"Please try uploading the file again.",
+                parse_mode="Markdown",
+            )
+            return
+            
+        file_size_mb = file_size / (1024 * 1024)
         settings = get_settings()
         
         # Check if file is too large (over 2GB)
@@ -115,7 +175,7 @@ Just send me a file and I'll handle the rest! 🚀
 
         # Send processing message
         processing_msg = await update.message.reply_text(
-            f"🔄 **Processing {document.file_name}**\n\n"
+            f"🔄 **Processing {file_name}**\n\n"
             f"📁 Size: {file_size_mb:.1f}MB\n"
             f"⏳ This will take a few minutes...",
             parse_mode="Markdown",
@@ -124,73 +184,52 @@ Just send me a file and I'll handle the rest! 🚀
         temp_files_to_cleanup = []
 
         try:
-            # Determine download method based on file size
-            if file_size_mb <= settings.telegram_api_limit_mb:
-                # Use Bot API for smaller files (faster)
+            # Use MTProto for all file downloads (supports files up to 2GB)
+            await processing_msg.edit_text(
+                f"🔄 **Processing {file_name}**\n\n"
+                f"📁 Size: {file_size_mb:.1f}MB\n"
+                f"📥 Downloading...",
+                parse_mode="Markdown",
+            )
+
+            # Progress callback for downloads
+            last_progress = 0
+            async def progress_callback(current: int, total: int):
+                nonlocal last_progress
+                progress = int((current / total) * 100)
+                
+                # Update every 10% to avoid rate limits
+                if progress >= last_progress + 10:
+                    last_progress = progress
+                    try:
+                        await processing_msg.edit_text(
+                            f"🔄 **Processing {file_name}**\n\n"
+                            f"📁 Size: {file_size_mb:.1f}MB\n"
+                            f"📥 Downloading... {progress}%",
+                            parse_mode="Markdown",
+                        )
+                    except Exception:
+                        # Ignore rate limit errors during progress updates
+                        pass
+
+            temp_file_path = await self.mtproto_downloader.download_file_by_message(
+                chat_id, message_id, progress_callback
+            )
+            
+            if not temp_file_path:
                 await processing_msg.edit_text(
-                    f"🔄 **Processing {document.file_name}**\n\n"
-                    f"📁 Size: {file_size_mb:.1f}MB\n"
-                    f"📥 Downloading...",
+                    f"❌ **Failed to download {file_name}**\n\n"
+                    f"Could not download the file. Please try again.",
                     parse_mode="Markdown",
                 )
-
-                file = await context.bot.get_file(document.file_id)
-                file_content = await file.download_as_bytearray()
-                file_extension = os.path.splitext(document.file_name)[1].lower()
-                temp_file_path = await self.file_service.save_temp_file(
-                    bytes(file_content), file_extension
-                )
-                temp_files_to_cleanup.append(temp_file_path)
+                return
                 
-                logger.info(f"Downloaded {file_size_mb:.1f}MB file via Bot API")
-
-            else:
-                # Use MTProto for large files
-                await processing_msg.edit_text(
-                    f"🔄 **Processing {document.file_name}**\n\n"
-                    f"📁 Size: {file_size_mb:.1f}MB\n"
-                    f"📥 Downloading large file...",
-                    parse_mode="Markdown",
-                )
-
-                # Progress callback for large downloads
-                last_progress = 0
-                async def progress_callback(current: int, total: int):
-                    nonlocal last_progress
-                    progress = int((current / total) * 100)
-                    
-                    # Update every 10% to avoid rate limits
-                    if progress >= last_progress + 10:
-                        last_progress = progress
-                        try:
-                            await processing_msg.edit_text(
-                                f"🔄 **Processing {document.file_name}**\n\n"
-                                f"📁 Size: {file_size_mb:.1f}MB\n"
-                                f"📥 Downloading... {progress}%",
-                                parse_mode="Markdown",
-                            )
-                        except Exception:
-                            # Ignore rate limit errors during progress updates
-                            pass
-
-                temp_file_path = await self.mtproto_downloader.download_file_by_message(
-                    chat_id, message_id, progress_callback
-                )
-                
-                if not temp_file_path:
-                    await processing_msg.edit_text(
-                        f"❌ **Failed to download {document.file_name}**\n\n"
-                        f"Could not download the large file. Please try again.",
-                        parse_mode="Markdown",
-                    )
-                    return
-                    
-                temp_files_to_cleanup.append(temp_file_path)
-                logger.info(f"Downloaded {file_size_mb:.1f}MB file via MTProto")
+            temp_files_to_cleanup.append(temp_file_path)
+            logger.info(f"Downloaded {file_size_mb:.1f}MB file via MTProto")
 
             # Start transcription
             await processing_msg.edit_text(
-                f"🔄 **Processing {document.file_name}**\n\n"
+                f"🔄 **Processing {file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"🎙️ Transcribing...",
                 parse_mode="Markdown",
@@ -201,7 +240,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             if not transcript:
                 await processing_msg.edit_text(
-                    f"❌ **Could not transcribe {document.file_name}**\n\n"
+                    f"❌ **Could not transcribe {file_name}**\n\n"
                     f"This might be due to audio quality or format issues.\n"
                     f"Please try with a different file.",
                     parse_mode="Markdown",
@@ -210,7 +249,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             # Update progress for speaker identification
             await processing_msg.edit_text(
-                f"🔄 **Processing {document.file_name}**\n\n"
+                f"🔄 **Processing {file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"👥 Identifying speakers...",
                 parse_mode="Markdown",
@@ -229,7 +268,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             # Update progress
             await processing_msg.edit_text(
-                f"🔄 **Processing {document.file_name}**\n\n"
+                f"🔄 **Processing {file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"📝 Creating summary...",
                 parse_mode="Markdown",
@@ -242,7 +281,7 @@ Just send me a file and I'll handle the rest! 🚀
                     document=transcript_file,
                     filename=transcript_filename,
                     caption=f"📄 **Transcript ready!**\n\n"
-                    f"From: {document.file_name}",
+                    f"From: {file_name}",
                     parse_mode="Markdown",
                 )
 
@@ -257,35 +296,64 @@ Just send me a file and I'll handle the rest! 🚀
 
                 # Split long messages if needed
                 if len(summary_message) <= 4096:
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=summary_message,
-                        parse_mode="Markdown",
-                    )
+                    try:
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text=summary_message,
+                            parse_mode="Markdown",
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to send with Markdown, trying without formatting: {e}")
+                        # Fallback to plain text if markdown fails
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text=summary_message,
+                        )
                 else:
                     chunks = self._split_message(summary_message, 4000)
                     for i, chunk in enumerate(chunks):
-                        if i == 0:
-                            await context.bot.send_message(
-                                chat_id=update.effective_chat.id,
-                                text=chunk,
-                                parse_mode="Markdown",
-                            )
-                        else:
-                            await context.bot.send_message(
-                                chat_id=update.effective_chat.id,
-                                text=f"📋 **Summary & Action Points (Part {i+1})**\n\n{chunk}",
-                                parse_mode="Markdown",
-                            )
+                        try:
+                            if i == 0:
+                                await context.bot.send_message(
+                                    chat_id=update.effective_chat.id,
+                                    text=chunk,
+                                    parse_mode="Markdown",
+                                )
+                            else:
+                                await context.bot.send_message(
+                                    chat_id=update.effective_chat.id,
+                                    text=f"📋 **Summary & Action Points (Part {i+1})**\n\n{chunk}",
+                                    parse_mode="Markdown",
+                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to send chunk {i+1} with Markdown, trying without formatting: {e}")
+                            # Fallback to plain text if markdown fails
+                            if i == 0:
+                                await context.bot.send_message(
+                                    chat_id=update.effective_chat.id,
+                                    text=chunk,
+                                )
+                            else:
+                                await context.bot.send_message(
+                                    chat_id=update.effective_chat.id,
+                                    text=f"📋 Summary & Action Points (Part {i+1})\n\n{chunk}",
+                                )
 
-                await processing_msg.edit_text(
-                    f"✅ **{document.file_name} processed successfully!**\n\n"
-                    f"📄 Transcript and summary are ready above.",
-                    parse_mode="Markdown",
-                )
+                try:
+                    await processing_msg.edit_text(
+                        f"✅ **{file_name} processed successfully!**\n\n"
+                        f"📄 Transcript and summary are ready above.",
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send success message with Markdown: {e}")
+                    await processing_msg.edit_text(
+                        f"✅ {file_name} processed successfully!\n\n"
+                        f"📄 Transcript and summary are ready above.",
+                    )
             else:
                 await processing_msg.edit_text(
-                    f"✅ **{document.file_name} transcribed!**\n\n"
+                    f"✅ **{file_name} transcribed!**\n\n"
                     f"📄 Transcript is ready above.\n"
                     f"⚠️ Summary generation failed, but you have the full transcript.",
                     parse_mode="Markdown",
@@ -296,10 +364,11 @@ Just send me a file and I'll handle the rest! 🚀
             )
 
         except Exception as e:
-            logger.error(f"Error processing file for user {user_id}: {e}")
+            logger.error(f"Error processing file for user {user_id}: {e}", exc_info=True)
             await processing_msg.edit_text(
-                f"❌ **Error processing {document.file_name}**\n\n"
-                f"Something went wrong. Please try again with a different file.",
+                f"❌ **Error processing {file_name}**\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Please try again with a different file.",
                 parse_mode="Markdown",
             )
         finally:
@@ -327,6 +396,10 @@ Just send me a file and I'll handle the rest! 🚀
         if not filename:
             return False
 
+        # Voice messages and video notes are always supported (Telegram handles format)
+        if filename.startswith("voice_") or filename.startswith("video_note_"):
+            return True
+
         extension = os.path.splitext(filename)[1].lower()
 
         supported_extensions = {
@@ -346,6 +419,7 @@ Just send me a file and I'll handle the rest! 🚀
             ".ogg",
             ".m4a",
             ".wma",
+            ".opus",
         }
 
         return extension in supported_extensions
@@ -377,14 +451,12 @@ Just send me a file and I'll handle the rest! 🚀
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
 
-        # Document handler
-        application.add_handler(
-            MessageHandler(filters.Document.ALL, self.handle_document)
-        )
-
-        # Audio and video handlers
-        application.add_handler(MessageHandler(filters.AUDIO, self.handle_document))
-        application.add_handler(MessageHandler(filters.VIDEO, self.handle_document))
+        # File handlers (documents, audio, video, voice, video notes)
+        application.add_handler(MessageHandler(filters.Document.ALL, self.handle_file))
+        application.add_handler(MessageHandler(filters.AUDIO, self.handle_file))
+        application.add_handler(MessageHandler(filters.VIDEO, self.handle_file))
+        application.add_handler(MessageHandler(filters.VOICE, self.handle_file))
+        application.add_handler(MessageHandler(filters.VIDEO_NOTE, self.handle_file))
 
         # Handle other message types
         application.add_handler(
@@ -408,8 +480,31 @@ Just send me a file and I'll handle the rest! 🚀
             # Setup handlers
             self.setup_handlers(application)
 
-            # Run the bot
-            await application.run_polling(allowed_updates=Update.ALL_TYPES)
+            # Initialize and start the bot
+            await application.initialize()
+            await application.start()
+            
+            # Start polling
+            await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            
+            # Keep running until interrupted
+            logger.info("Bot is running. Press Ctrl+C to stop.")
+            
+            # Wait indefinitely
+            try:
+                while True:
+                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Received interrupt signal")
+                
         finally:
             # Cleanup
+            try:
+                if application.updater.running:
+                    await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+            except Exception as e:
+                logger.warning(f"Error during application shutdown: {e}")
+            
             await self.cleanup()

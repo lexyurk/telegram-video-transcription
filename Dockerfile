@@ -10,23 +10,21 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    ffprobe \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
 RUN pip install uv
 
-# Copy project files
+# Copy all project files (needed for building the package)
 COPY pyproject.toml ./
 COPY uv.lock ./
+COPY README.md ./
+COPY telegram_bot/ ./telegram_bot/
+COPY main.py ./
 
 # Install Python dependencies
 RUN uv sync --frozen
-
-# Copy source code
-COPY src/ ./src/
-COPY main.py ./
 
 # Create temp directory
 RUN mkdir -p ./temp

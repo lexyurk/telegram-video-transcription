@@ -17,13 +17,12 @@ class Settings(BaseSettings):
     # Deepgram API Key
     deepgram_api_key: str = Field(alias="DEEPGRAM_API_KEY")
 
-    # Anthropic API Key
-    anthropic_api_key: str = Field(alias="ANTHROPIC_API_KEY")
+    # AI Model API Keys (at least one required)
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
+    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
 
     # File size settings
     max_file_size_mb: int = Field(default=2048, alias="MAX_FILE_SIZE_MB")  # 2GB Telegram limit
-    telegram_api_limit_mb: int = Field(default=50, alias="TELEGRAM_API_LIMIT_MB")
-    large_file_chunk_size_mb: int = Field(default=25, alias="LARGE_FILE_CHUNK_SIZE_MB")
     
     # Telethon settings for large file downloads
     api_id: int = Field(alias="TELEGRAM_API_ID")
@@ -43,8 +42,8 @@ class Settings(BaseSettings):
     deepgram_model: str = Field(default="nova-2", alias="DEEPGRAM_MODEL")
     # Language detection is automatic - no need to specify language
     deepgram_timeout_seconds: int = Field(
-        default=1800, alias="DEEPGRAM_TIMEOUT_SECONDS"
-    )  # 30 minutes
+        default=3600, alias="DEEPGRAM_TIMEOUT_SECONDS"
+    )  # 60 minutes for large files
     
     # Advanced Deepgram features
     enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")
@@ -56,9 +55,9 @@ class Settings(BaseSettings):
     enable_redaction: bool = Field(default=False, alias="ENABLE_REDACTION")
     enable_filler_words: bool = Field(default=True, alias="ENABLE_FILLER_WORDS")
 
-    # Claude settings
+    # AI Model settings
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     claude_model: str = Field(default="claude-sonnet-4-20250514", alias="CLAUDE_MODEL")
-    claude_max_tokens: int = Field(default=4000, alias="CLAUDE_MAX_TOKENS")
 
     # Performance settings
     enable_streaming: bool = Field(default=True, alias="ENABLE_STREAMING")

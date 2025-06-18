@@ -4,19 +4,17 @@ import json
 import re
 from typing import Dict, Optional
 
-from anthropic import AsyncAnthropic
 from loguru import logger
 
-from telegram_bot.config import get_settings
+from telegram_bot.services.ai_model import AIModel, create_ai_model
 
 
 class SpeakerIdentificationService:
     """Service for identifying speaker names from transcripts using AI."""
 
-    def __init__(self) -> None:
+    def __init__(self, ai_model: AIModel | None = None) -> None:
         """Initialize the speaker identification service."""
-        settings = get_settings()
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.ai_model = ai_model or create_ai_model()
 
     async def identify_speakers(self, transcript: str) -> Dict[str, str] | None:
         """
@@ -61,15 +59,12 @@ Transcript:
 {transcript}
 """
 
-            settings = get_settings()
-            message = await self.client.messages.create(
-                model=settings.claude_model,
-                max_tokens=1000,  # Keep it short for JSON response
-                temperature=0.1,  # Low temperature for consistency
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            response_text = message.content[0].text.strip()
+            response_text = await self.ai_model.generate_text(prompt)
+            if not response_text:
+                logger.warning("No response from AI model")
+                return {}
+            
+            response_text = response_text.strip()
             
             # Try to extract JSON from the response
             try:

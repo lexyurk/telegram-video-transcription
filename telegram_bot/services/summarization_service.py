@@ -1,60 +1,136 @@
-"""Summarization service for handling Claude AI summarization."""
+"""Summarization service for handling AI summarization."""
 
-from anthropic import AsyncAnthropic
+import re
 from loguru import logger
 
-from telegram_bot.config import get_settings
+from telegram_bot.services.ai_model import AIModel
 
 
 class SummarizationService:
-    """Service for handling Claude AI summarization."""
+    """Service for creating summaries with action points using AI models."""
 
-    def __init__(self) -> None:
+    def __init__(self, ai_model: AIModel | None = None) -> None:
         """Initialize the summarization service."""
-        settings = get_settings()
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        from telegram_bot.services.ai_model import create_ai_model
+        
+        self.ai_model = ai_model or create_ai_model()
+
+    def _remove_speaker_labels(self, text: str) -> str:
+        """
+        Remove speaker labels from transcript to avoid language confusion in AI.
+        
+        Args:
+            text: Transcript with speaker labels
+            
+        Returns:
+            Clean transcript without speaker labels
+        """
+        import re
+        
+        # Remove speaker labels like "Speaker 0:", "Серафима:", etc.
+        # This pattern matches:
+        # - "Speaker X:" (English)
+        # - "Спикер X:" (Russian) 
+        # - Any name followed by ":"
+        lines = text.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            # Remove speaker labels at the beginning of lines
+            cleaned_line = re.sub(r'^[^:]+:\s*', '', line.strip())
+            if cleaned_line:  # Only add non-empty lines
+                cleaned_lines.append(cleaned_line)
+        
+        return ' '.join(cleaned_lines)
+
+    def _sanitize_markdown(self, text: str) -> str:
+        """
+        Sanitize markdown text to prevent Telegram parsing errors.
+        
+        Args:
+            text: Raw markdown text
+            
+        Returns:
+            Sanitized markdown text
+        """
+        # Remove or fix common problematic markdown patterns
+        
+        # Fix unmatched bold markers
+        text = re.sub(r'\*\*([^*]*)\*(?!\*)', r'**\1**', text)  # Fix single * after **
+        text = re.sub(r'(?<!\*)\*([^*]*)\*\*', r'**\1**', text)  # Fix single * before **
+        
+        # Fix unmatched italic markers
+        text = re.sub(r'(?<!\*)\*([^*\n]+)(?!\*)', r'_\1_', text)  # Convert single * to _
+        
+        # Fix unmatched code blocks
+        text = re.sub(r'```([^`]*)$', r'```\1```', text, flags=re.MULTILINE)  # Close unclosed code blocks
+        
+        # Fix unmatched inline code
+        text = re.sub(r'`([^`\n]*?)(?=\n|$)', r'`\1`', text)  # Close unclosed inline code
+        
+        # Remove any remaining problematic characters that could break parsing
+        text = re.sub(r'[^\w\s\n\r\*_`#\-\.\!\?\(\)\[\]:\|]', '', text)
+        
+        return text.strip()
 
     async def create_summary_with_action_points(self, transcript: str) -> str | None:
         """
-        Create a summary with action points using Claude.
+        Create a summary with action points using AI.
 
         Args:
-            transcript: The transcribed text
+            transcript: The transcript text to summarize
 
         Returns:
-            Formatted summary with action points or None if failed
+            Summary with action points or None if failed
         """
         try:
-            prompt = f"""
-Please analyze the following transcript and provide a comprehensive summary. 
+            if not transcript.strip():
+                logger.warning("Empty transcript provided for summarization")
+                return None
 
-IMPORTANT: Respond in the same language as the input transcript. If the transcript is in Spanish, respond in Spanish. If it's in English, respond in English, etc.
+            # Remove speaker labels to avoid language confusion in AI
+            clean_transcript = self._remove_speaker_labels(transcript)
+            logger.info(f"Removed speaker labels for summarization. Original: {len(transcript)} chars, Clean: {len(clean_transcript)} chars")
 
-Please provide:
+            # Improved prompt for cleaner markdown output
+            prompt = f"""Please create a concise summary of this transcript with clear action points.
 
-1. **Executive Summary**: A brief overview of the main topics discussed
-2. **Key Points**: The most important information and insights
-3. **Action Items**: Specific actions mentioned or implied that need to be taken
-4. **Next Steps**: Recommended follow-up actions
+IMPORTANT FORMATTING RULES:
+- Use simple markdown: **bold** for headers, - for bullet points
+- Do NOT use complex formatting, nested lists, or special characters
+- Keep all markdown balanced (every ** must have a closing **)
+- Use plain text for most content, markdown only for emphasis
+- RESPOND IN THE SAME LANGUAGE AS THE TRANSCRIPT (if transcript is in Russian, respond in Russian, etc.)
 
-Please format your response clearly with headers and bullet points for easy reading. Use the same language as the transcript for all sections including headers.
+Structure your response as:
+
+**Summary**
+[2-3 sentences summarizing the main discussion]
+
+**Key Points**
+- Point 1
+- Point 2  
+- Point 3
+
+**Action Items**
+- Action 1
+- Action 2
+- Action 3
 
 Transcript:
-{transcript}
-"""
+{clean_transcript[:4000]}"""  # Limit transcript length to avoid token limits
 
-            settings = get_settings()
-            message = await self.client.messages.create(
-                model=settings.claude_model,
-                max_tokens=settings.claude_max_tokens,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt}],
-            )
-
-            summary = message.content[0].text
-            logger.info(f"Successfully created summary: {len(summary)} characters")
-            return summary
+            summary = await self.ai_model.generate_text(prompt)
+            
+            if summary:
+                # Sanitize the markdown before returning
+                sanitized_summary = self._sanitize_markdown(summary)
+                logger.info(f"Successfully created summary: {len(sanitized_summary)} characters")
+                return sanitized_summary
+            else:
+                logger.error("AI model returned empty summary")
+                return None
 
         except Exception as e:
-            logger.error(f"Error creating summary: {e}")
+            logger.error(f"Error creating summary: {e}", exc_info=True)
             return None 

@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, patch
 import pytest
 
-from telegram_bot.speaker_identification_service import SpeakerIdentificationService
+from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
 
 
 class TestSpeakerIdentificationService:
@@ -11,7 +11,7 @@ class TestSpeakerIdentificationService:
 
     def test_replace_speaker_labels(self):
         """Test replacing speaker labels with actual names."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             service = SpeakerIdentificationService()
             
@@ -35,7 +35,7 @@ Alexander: Great to hear that, Alexey."""
 
     def test_replace_speaker_labels_empty_names(self):
         """Test that empty speaker names returns original transcript."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             service = SpeakerIdentificationService()
             
@@ -46,7 +46,7 @@ Alexander: Great to hear that, Alexey."""
 
     def test_replace_speaker_labels_partial_names(self):
         """Test replacing only some speaker labels."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             service = SpeakerIdentificationService()
             
@@ -71,7 +71,7 @@ Maria: Good morning!"""
     @pytest.mark.asyncio
     async def test_identify_speakers_no_speakers(self):
         """Test identifying speakers when no speaker labels exist."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             
             service = SpeakerIdentificationService()
@@ -84,7 +84,7 @@ Maria: Good morning!"""
     @pytest.mark.asyncio
     async def test_process_transcript_with_speaker_names_no_speakers(self):
         """Test processing transcript when no speakers are identified."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             
             service = SpeakerIdentificationService()
@@ -100,7 +100,7 @@ Maria: Good morning!"""
     @pytest.mark.asyncio
     async def test_process_transcript_with_speaker_names_success(self):
         """Test successful processing of transcript with speaker identification."""
-        with patch("telegram_bot.speaker_identification_service.get_settings") as mock_settings:
+        with patch("telegram_bot.services.speaker_identification_service.get_settings") as mock_settings:
             mock_settings.return_value.anthropic_api_key = "test_key"
             
             service = SpeakerIdentificationService()

@@ -206,10 +206,12 @@ telegram-video-transcription/
 │   ├── bot.py                     # Main bot logic
 │   ├── config.py                  # Configuration management
 │   ├── services.py                # Service imports (backward compatibility)
-│   ├── transcription_service.py   # Deepgram transcription service
-│   ├── summarization_service.py   # Claude AI summarization service
-│   ├── speaker_identification_service.py # AI speaker name identification
-│   ├── file_service.py            # File operations service
+│   ├── services/                  # Services package
+│   │   ├── __init__.py           # Services package init
+│   │   ├── transcription_service.py      # Deepgram transcription service
+│   │   ├── summarization_service.py      # Claude AI summarization service
+│   │   ├── speaker_identification_service.py # AI speaker name identification
+│   │   └── file_service.py               # File operations service
 │   └── mtproto_downloader.py      # Large file downloader via MTProto
 ├── tests/                         # Test files
 ├── main.py                        # Root entry point

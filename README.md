@@ -8,6 +8,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 - 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and Claude AI for summaries (responds in the same language as input)
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations
+- 👥 **Smart Speaker Names**: AI-powered detection of actual speaker names from conversations
 - ✨ **Smart Formatting**: Automatic punctuation, paragraphs, and number formatting
 - 📄 **Enhanced Transcripts**: Speaker labels, timestamps, and professional formatting
 - 📝 **Smart Summaries**: Creates summaries with action points automatically
@@ -24,6 +25,28 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 
 ### Audio  
 - MP3, WAV, AAC, FLAC, OGG, M4A, WMA
+
+## How It Works
+
+### Processing Pipeline
+
+1. **File Upload**: Upload video/audio files up to 2GB
+2. **Download**: Uses Bot API for small files (<50MB) or MTProto for large files  
+3. **Transcription**: Deepgram Nova-2 with speaker diarization and smart formatting
+4. **Speaker Identification**: AI analyzes conversation to identify actual speaker names
+5. **Name Replacement**: Replaces "Speaker 0" with real names like "Alexander"
+6. **Summarization**: Claude AI creates summaries with action points in the same language
+7. **Delivery**: Sends transcript file and formatted summary
+
+### Speaker Identification
+
+The bot includes an intelligent speaker identification system:
+
+- **AI-Powered Name Detection**: Uses Claude AI to analyze conversations and identify actual speaker names
+- **Automatic Replacement**: Replaces generic "Speaker 0", "Speaker 1" labels with real names
+- **Context-Aware**: Analyzes how speakers address each other and introduce themselves  
+- **Fallback Handling**: If names can't be identified, keeps original speaker labels
+- **Multi-Language Support**: Works with conversations in any language
 
 ## Prerequisites
 
@@ -185,6 +208,7 @@ telegram-video-transcription/
 │   ├── services.py                # Service imports (backward compatibility)
 │   ├── transcription_service.py   # Deepgram transcription service
 │   ├── summarization_service.py   # Claude AI summarization service
+│   ├── speaker_identification_service.py # AI speaker name identification
 │   ├── file_service.py            # File operations service
 │   └── mtproto_downloader.py      # Large file downloader via MTProto
 ├── tests/                         # Test files

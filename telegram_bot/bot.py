@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 from telegram_bot.config import get_settings
-from telegram_bot.services import FileService, SummarizationService, TranscriptionService
+from telegram_bot.services import FileService, SummarizationService, TranscriptionService, SpeakerIdentificationService
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 
 
@@ -26,6 +26,7 @@ class TelegramTranscriptionBot:
         self.transcription_service = TranscriptionService()
         self.summarization_service = SummarizationService()
         self.file_service = FileService()
+        self.speaker_identification_service = SpeakerIdentificationService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -206,6 +207,17 @@ Just send me a file and I'll handle the rest! 🚀
                     parse_mode="Markdown",
                 )
                 return
+
+            # Update progress for speaker identification
+            await processing_msg.edit_text(
+                f"🔄 **Processing {document.file_name}**\n\n"
+                f"📁 Size: {file_size_mb:.1f}MB\n"
+                f"👥 Identifying speakers...",
+                parse_mode="Markdown",
+            )
+
+            # Identify and replace speaker names
+            transcript = await self.speaker_identification_service.process_transcript_with_speaker_names(transcript)
 
             # Create transcript file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

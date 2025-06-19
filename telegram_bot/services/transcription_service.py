@@ -14,8 +14,12 @@ class TranscriptionService:
     def __init__(self) -> None:
         """Initialize the transcription service."""
         settings = get_settings()
+        
+        # Initialize Deepgram client
         self.client = DeepgramClient(settings.deepgram_api_key)
         self.timeout_seconds = settings.deepgram_timeout_seconds
+        
+        logger.info(f"Initialized Deepgram client with {self.timeout_seconds}s timeout")
 
     async def transcribe_audio(self, file_path: str) -> str | None:
         """
@@ -66,19 +70,32 @@ class TranscriptionService:
                 buffer_data = await audio_file.read()
 
             payload = {"buffer": buffer_data}
+            
+            # Calculate dynamic timeout based on file size (roughly 2 minutes per MB + base time)
+            file_size_mb = len(buffer_data) / (1024 * 1024)
+            dynamic_timeout = max(300, int(file_size_mb * 120) + 300)  # At least 5 minutes, plus 2 min per MB
+            actual_timeout = min(dynamic_timeout, self.timeout_seconds)  # Don't exceed configured max
 
             logger.info(f"Starting enhanced transcription for file: {file_path} ({len(buffer_data)} bytes)")
             logger.info(f"Features enabled: diarization={settings.enable_diarization}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
+            logger.info(f"File size: {file_size_mb:.1f}MB, Dynamic timeout: {actual_timeout}s (calculated: {dynamic_timeout}s, max: {self.timeout_seconds}s)")
 
             # Use the synchronous client wrapped in asyncio.to_thread for better compatibility
-            response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.client.listen.prerecorded.v("1").transcribe_file,
-                    payload,
-                    options
-                ),
-                timeout=self.timeout_seconds
-            )
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.client.listen.prerecorded.v("1").transcribe_file,
+                        payload,
+                        options
+                    ),
+                    timeout=actual_timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Deepgram API call timed out after {actual_timeout} seconds")
+                raise
+            except Exception as e:
+                logger.error(f"Deepgram API call failed: {e}")
+                raise
 
             logger.info("Received response from Deepgram, processing...")
             
@@ -126,7 +143,7 @@ class TranscriptionService:
             return formatted_transcript
 
         except asyncio.TimeoutError:
-            logger.error(f"Transcription timed out after {self.timeout_seconds} seconds")
+            logger.error(f"Transcription timed out after {actual_timeout} seconds")
             return None
         except Exception as e:
             logger.error(f"Error transcribing audio: {e}", exc_info=True)

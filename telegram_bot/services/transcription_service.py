@@ -140,12 +140,33 @@ class TranscriptionService:
                 logger.info(f"Found paragraphs key. Type: {type(paragraphs_data)}")
                 if isinstance(paragraphs_data, dict):
                     logger.info(f"Paragraphs dict keys: {list(paragraphs_data.keys())}")
-                    if "paragraphs" in paragraphs_data and paragraphs_data["paragraphs"]:
-                        logger.info(f"Processing {len(paragraphs_data['paragraphs'])} paragraphs with enhanced formatting")
-                        return self._format_transcript_with_paragraphs(paragraphs_data["paragraphs"], settings)
+                    if "paragraphs" in paragraphs_data:
+                        actual_paragraphs = paragraphs_data["paragraphs"]
+                        logger.info(f"Paragraphs list type: {type(actual_paragraphs)}, length: {len(actual_paragraphs) if actual_paragraphs else 'None/Empty'}")
+                        if actual_paragraphs and len(actual_paragraphs) > 0:
+                            logger.info(f"Processing {len(actual_paragraphs)} paragraphs with enhanced formatting")
+                            return self._format_transcript_with_paragraphs(actual_paragraphs, settings)
+                        else:
+                            logger.warning(f"Paragraphs list is empty or None: {actual_paragraphs}")
+                    
+                    # Check if there's a pre-formatted transcript in paragraphs
+                    if "transcript" in paragraphs_data:
+                        paragraphs_transcript = paragraphs_data["transcript"]
+                        logger.info(f"Found paragraphs transcript. Length: {len(paragraphs_transcript) if paragraphs_transcript else 0}")
+                        if paragraphs_transcript and paragraphs_transcript.strip():
+                            logger.info("Using pre-formatted paragraphs transcript")
+                            return paragraphs_transcript.strip()
+                        else:
+                            logger.warning("Paragraphs transcript is empty")
+                    else:
+                        logger.warning("No 'paragraphs' key in paragraphs_data")
                 elif isinstance(paragraphs_data, list) and len(paragraphs_data) > 0:
                     logger.info(f"Processing {len(paragraphs_data)} paragraphs (direct list) with enhanced formatting")
                     return self._format_transcript_with_paragraphs(paragraphs_data, settings)
+                else:
+                    logger.warning(f"Unexpected paragraphs_data type: {type(paragraphs_data)}, value: {paragraphs_data}")
+            else:
+                logger.warning("No 'paragraphs' key found in alternative")
             
             # Fallback: Check for utterances if paragraphs not available
             if ("utterances" in results and 
@@ -154,6 +175,8 @@ class TranscriptionService:
                 
                 logger.info(f"Fallback: Processing {len(results['utterances'])} utterances")
                 return self._format_transcript_with_speakers(results["utterances"])
+            else:
+                logger.warning(f"No utterances available. Utterances in results: {'utterances' in results}, utterances value: {results.get('utterances', 'Missing')}")
             
             # Final fallback: Basic transcript
             basic_transcript = alternative.get("transcript", "")
@@ -162,6 +185,7 @@ class TranscriptionService:
                 logger.warning("Basic transcript is also empty!")
                 # Let's log more details to debug
                 logger.debug(f"Alternative structure: {alternative}")
+                logger.debug(f"Full results structure keys: {list(results.keys())}")
             return basic_transcript
                 
         except Exception as e:

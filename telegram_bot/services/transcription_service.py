@@ -51,9 +51,14 @@ class TranscriptionService:
                 profanity_filter=settings.enable_profanity_filter,
                 redact=settings.enable_redaction,
                 
-                # Output formatting
-                encoding="linear16",  # Ensure consistent audio processing
-                sample_rate=16000,  # Standard sample rate for best results
+                # Enhanced audio processing for better detection
+                numerals=True,  # Convert numbers to numerals
+                dictation=True,  # Better for dictated content
+                utt_split=0.8,  # More sensitive utterance splitting
+                
+                # Remove encoding constraints to let Deepgram handle it automatically
+                # encoding="linear16",  # Removed - let Deepgram auto-detect
+                # sample_rate=16000,  # Removed - let Deepgram auto-detect
             )
 
             # Read the file and create payload
@@ -98,6 +103,17 @@ class TranscriptionService:
             if "detected_language" in result:
                 detected_lang = result["detected_language"]
                 logger.info(f"Detected language: {detected_lang}")
+            else:
+                logger.warning("No language detected in response")
+            
+            # Log confidence and other metadata
+            confidence = result.get("confidence", 0)
+            logger.info(f"Transcription confidence: {confidence}")
+            
+            # Debug: Log raw response structure for troubleshooting
+            logger.debug(f"Raw alternative keys: {list(result.keys())}")
+            logger.debug(f"Raw result confidence: {result.get('confidence', 'N/A')}")
+            logger.debug(f"Raw basic transcript (first 100 chars): '{result.get('transcript', '')[:100]}'")
             
             # Process transcript based on available features
             formatted_transcript = await self._process_enhanced_transcript(response["results"], settings)
@@ -153,13 +169,14 @@ class TranscriptionService:
                     if "transcript" in paragraphs_data:
                         paragraphs_transcript = paragraphs_data["transcript"]
                         logger.info(f"Found paragraphs transcript. Length: {len(paragraphs_transcript) if paragraphs_transcript else 0}")
+                        logger.debug(f"Paragraphs transcript content (first 200 chars): '{paragraphs_transcript[:200] if paragraphs_transcript else 'None'}'")
                         if paragraphs_transcript and paragraphs_transcript.strip():
                             logger.info("Using pre-formatted paragraphs transcript")
                             return paragraphs_transcript.strip()
                         else:
-                            logger.warning("Paragraphs transcript is empty")
+                            logger.warning(f"Paragraphs transcript is empty after strip. Raw: '{paragraphs_transcript}'")
                     else:
-                        logger.warning("No 'paragraphs' key in paragraphs_data")
+                        logger.warning("No 'transcript' key in paragraphs_data")
                 elif isinstance(paragraphs_data, list) and len(paragraphs_data) > 0:
                     logger.info(f"Processing {len(paragraphs_data)} paragraphs (direct list) with enhanced formatting")
                     return self._format_transcript_with_paragraphs(paragraphs_data, settings)

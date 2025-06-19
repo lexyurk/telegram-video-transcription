@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")  # Speaker identification
     enable_punctuation: bool = Field(default=True, alias="ENABLE_PUNCTUATION")  # Add punctuation
     enable_paragraphs: bool = Field(default=True, alias="ENABLE_PARAGRAPHS")  # Group into logical paragraphs
-    enable_utterances: bool = Field(default=False, alias="ENABLE_UTTERANCES")  # Disabled in favor of paragraphs
+    enable_utterances: bool = Field(default=True, alias="ENABLE_UTTERANCES")  # Keep as fallback for paragraphs
     enable_smart_format: bool = Field(default=True, alias="ENABLE_SMART_FORMAT")  # Enhanced formatting
     enable_profanity_filter: bool = Field(default=False, alias="ENABLE_PROFANITY_FILTER")
     enable_redaction: bool = Field(default=False, alias="ENABLE_REDACTION")

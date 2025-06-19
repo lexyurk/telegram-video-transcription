@@ -39,9 +39,9 @@ class TranscriptionService:
                 smart_format=settings.enable_smart_format,  # Better formatting (dates, numbers, etc.)
                 punctuate=settings.enable_punctuation,  # Add punctuation
                 
-                # Content structure - prioritize paragraphs over utterances
+                # Content structure - use both paragraphs and utterances
                 paragraphs=settings.enable_paragraphs,  # Group content into logical paragraphs
-                utterances=False,  # Disable utterances to prevent chunking into small segments
+                utterances=True,  # Keep as fallback for speaker diarization
                 
                 # Speaker identification
                 diarize=settings.enable_diarization,  # Enable speaker identification
@@ -130,33 +130,50 @@ class TranscriptionService:
         try:
             alternative = results["channels"][0]["alternatives"][0]
             
+            # Debug logging to understand the response structure
+            logger.info(f"Available keys in alternative: {list(alternative.keys())}")
+            logger.info(f"Available keys in results: {list(results.keys())}")
+            
             # Check if we have paragraphs (preferred method)
-            if ("paragraphs" in alternative and 
-                alternative["paragraphs"] and 
-                "paragraphs" in alternative["paragraphs"] and
-                len(alternative["paragraphs"]["paragraphs"]) > 0):
-                
-                logger.info(f"Processing {len(alternative['paragraphs']['paragraphs'])} paragraphs with enhanced formatting")
-                return self._format_transcript_with_paragraphs(alternative["paragraphs"]["paragraphs"], settings)
+            if "paragraphs" in alternative:
+                paragraphs_data = alternative["paragraphs"]
+                logger.info(f"Found paragraphs key. Type: {type(paragraphs_data)}")
+                if isinstance(paragraphs_data, dict):
+                    logger.info(f"Paragraphs dict keys: {list(paragraphs_data.keys())}")
+                    if "paragraphs" in paragraphs_data and paragraphs_data["paragraphs"]:
+                        logger.info(f"Processing {len(paragraphs_data['paragraphs'])} paragraphs with enhanced formatting")
+                        return self._format_transcript_with_paragraphs(paragraphs_data["paragraphs"], settings)
+                elif isinstance(paragraphs_data, list) and len(paragraphs_data) > 0:
+                    logger.info(f"Processing {len(paragraphs_data)} paragraphs (direct list) with enhanced formatting")
+                    return self._format_transcript_with_paragraphs(paragraphs_data, settings)
             
             # Fallback: Check for utterances if paragraphs not available
-            elif ("utterances" in results and 
-                  results["utterances"] and 
-                  len(results["utterances"]) > 0):
+            if ("utterances" in results and 
+                results["utterances"] and 
+                len(results["utterances"]) > 0):
                 
                 logger.info(f"Fallback: Processing {len(results['utterances'])} utterances")
                 return self._format_transcript_with_speakers(results["utterances"])
             
             # Final fallback: Basic transcript
-            else:
-                basic_transcript = alternative.get("transcript", "")
-                logger.info("Using basic transcript (no paragraphs or speaker info available)")
-                return basic_transcript
+            basic_transcript = alternative.get("transcript", "")
+            logger.info(f"Using basic transcript (no paragraphs or speaker info available). Length: {len(basic_transcript)}")
+            if not basic_transcript:
+                logger.warning("Basic transcript is also empty!")
+                # Let's log more details to debug
+                logger.debug(f"Alternative structure: {alternative}")
+            return basic_transcript
                 
         except Exception as e:
-            logger.error(f"Error processing enhanced transcript: {e}")
+            logger.error(f"Error processing enhanced transcript: {e}", exc_info=True)
             # Return basic transcript as ultimate fallback
-            return results["channels"][0]["alternatives"][0].get("transcript", "")
+            try:
+                fallback = results["channels"][0]["alternatives"][0].get("transcript", "")
+                logger.info(f"Exception fallback transcript length: {len(fallback)}")
+                return fallback
+            except Exception as fallback_error:
+                logger.error(f"Even fallback failed: {fallback_error}")
+                return ""
 
     def _format_transcript_with_paragraphs(self, paragraphs: list, settings) -> str:
         """
@@ -173,44 +190,19 @@ class TranscriptionService:
         
         for paragraph in paragraphs:
             sentences = paragraph.get("sentences", [])
+            speaker = paragraph.get("speaker", 0)  # Speaker is at paragraph level
+            
             if not sentences:
                 continue
             
-            # Group sentences by speaker within each paragraph
-            current_speaker = None
-            current_section = []
+            # Combine all sentences in the paragraph
+            paragraph_text = " ".join([sentence.get("text", "").strip() for sentence in sentences if sentence.get("text", "").strip()])
             
-            for sentence in sentences:
-                text = sentence.get("text", "").strip()
-                speaker = sentence.get("speaker", None) if settings.enable_diarization else None
-                
-                if not text:
-                    continue
-                
-                # If speaker changed or this is the first sentence
-                if speaker is not None and speaker != current_speaker:
-                    # Save previous section if exists
-                    if current_section:
-                        speaker_label = f"Speaker {current_speaker}" if current_speaker is not None else ""
-                        section_text = " ".join(current_section)
-                        if speaker_label:
-                            formatted_sections.append(f"{speaker_label}: {section_text}")
-                        else:
-                            formatted_sections.append(section_text)
-                        current_section = []
-                    
-                    current_speaker = speaker
-                
-                current_section.append(text)
-            
-            # Add the last section of this paragraph
-            if current_section:
-                speaker_label = f"Speaker {current_speaker}" if current_speaker is not None and settings.enable_diarization else ""
-                section_text = " ".join(current_section)
-                if speaker_label:
-                    formatted_sections.append(f"{speaker_label}: {section_text}")
+            if paragraph_text:
+                if settings.enable_diarization and speaker is not None:
+                    formatted_sections.append(f"Speaker {speaker}: {paragraph_text}")
                 else:
-                    formatted_sections.append(section_text)
+                    formatted_sections.append(paragraph_text)
         
         # Join sections with double line breaks for better paragraph separation
         return "\n\n".join(formatted_sections)

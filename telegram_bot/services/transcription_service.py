@@ -3,6 +3,7 @@
 import asyncio
 import aiofiles
 from deepgram import DeepgramClient, PrerecordedOptions
+import httpx
 from loguru import logger
 
 from telegram_bot.config import get_settings
@@ -15,7 +16,8 @@ class TranscriptionService:
         """Initialize the transcription service."""
         settings = get_settings()
         
-        # Initialize Deepgram client
+        # Initialize Deepgram client with default configuration
+        # We'll pass timeout directly to transcribe_file method
         self.client = DeepgramClient(settings.deepgram_api_key)
         self.timeout_seconds = settings.deepgram_timeout_seconds
         
@@ -80,21 +82,33 @@ class TranscriptionService:
             logger.info(f"Features enabled: diarization={settings.enable_diarization}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
             logger.info(f"File size: {file_size_mb:.1f}MB, Dynamic timeout: {actual_timeout}s (calculated: {dynamic_timeout}s, max: {self.timeout_seconds}s)")
 
-            # Use the synchronous client wrapped in asyncio.to_thread for better compatibility
+            # Use direct timeout approach as suggested - pass timeout directly to transcribe_file
             try:
-                response = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self.client.listen.prerecorded.v("1").transcribe_file,
-                        payload,
-                        options
-                    ),
-                    timeout=actual_timeout
+                # Create timeout configuration for large file uploads
+                timeout_config = httpx.Timeout(
+                    connect=60.0,      # 60 seconds to establish connection
+                    read=actual_timeout,  # Long read timeout for processing
+                    write=600.0,       # 10 minutes for writing/uploading large files
+                    pool=10.0          # 10 seconds to get connection from pool
                 )
-            except asyncio.TimeoutError:
-                logger.error(f"Deepgram API call timed out after {actual_timeout} seconds")
-                raise
+                
+                logger.info(f"Using direct timeout approach: connect=60s, read={actual_timeout}s, write=600s, pool=10s")
+                
+                # Call transcribe_file with direct timeout parameter
+                response = await asyncio.to_thread(
+                    self.client.listen.prerecorded.v("1").transcribe_file,
+                    payload,
+                    options,
+                    timeout=timeout_config  # Pass timeout directly to the method
+                )
             except Exception as e:
-                logger.error(f"Deepgram API call failed: {e}")
+                error_msg = str(e).lower()
+                if "write operation timed out" in error_msg or "timeout" in error_msg:
+                    logger.error(f"HTTP timeout during file upload: {e}")
+                    logger.error("This suggests network issues or the file upload took too long")
+                    logger.error("Consider checking network connectivity or file size")
+                else:
+                    logger.error(f"Deepgram API call failed: {e}")
                 raise
 
             logger.info("Received response from Deepgram, processing...")

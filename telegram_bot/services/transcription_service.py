@@ -9,7 +9,7 @@ from telegram_bot.config import get_settings
 
 
 class TranscriptionService:
-    """Service for handling Deepgram transcription."""
+    """Service for handling Deepgram transcription with advanced features."""
 
     def __init__(self) -> None:
         """Initialize the transcription service."""
@@ -20,6 +20,7 @@ class TranscriptionService:
     async def transcribe_audio(self, file_path: str) -> str | None:
         """
         Transcribe audio file using Deepgram with enhanced features.
+        Uses paragraphs instead of utterances for better content grouping.
 
         Args:
             file_path: Path to the audio/video file
@@ -30,25 +31,39 @@ class TranscriptionService:
         try:
             settings = get_settings()
             
-            # Configure Deepgram options with speaker diarization
+            # Configure Deepgram options with optimal settings
             options = PrerecordedOptions(
                 model=settings.deepgram_model,
-                detect_language=True,
-                smart_format=settings.enable_smart_format,
-                punctuate=settings.enable_punctuation,
-                paragraphs=settings.enable_paragraphs,
-                diarize=settings.enable_diarization,
-                utterances=settings.enable_utterances,  # Required for speaker-labeled segments
+                # Language detection and formatting
+                detect_language=True,  # Auto-detect language
+                smart_format=settings.enable_smart_format,  # Better formatting (dates, numbers, etc.)
+                punctuate=settings.enable_punctuation,  # Add punctuation
+                
+                # Content structure - prioritize paragraphs over utterances
+                paragraphs=settings.enable_paragraphs,  # Group content into logical paragraphs
+                utterances=False,  # Disable utterances to prevent chunking into small segments
+                
+                # Speaker identification
+                diarize=settings.enable_diarization,  # Enable speaker identification
+                
+                # Audio processing enhancements
+                filler_words=settings.enable_filler_words,  # Include filler words for natural flow
+                profanity_filter=settings.enable_profanity_filter,
+                redact=settings.enable_redaction,
+                
+                # Output formatting
+                encoding="linear16",  # Ensure consistent audio processing
+                sample_rate=16000,  # Standard sample rate for best results
             )
 
-            # Read the file and create payload similar to the working example
+            # Read the file and create payload
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
 
-            # Create payload in the format expected by Deepgram
             payload = {"buffer": buffer_data}
 
-            logger.info(f"Starting transcription for file: {file_path} ({len(buffer_data)} bytes)")
+            logger.info(f"Starting enhanced transcription for file: {file_path} ({len(buffer_data)} bytes)")
+            logger.info(f"Features enabled: diarization={settings.enable_diarization}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
 
             # Use the synchronous client wrapped in asyncio.to_thread for better compatibility
             response = await asyncio.wait_for(
@@ -68,7 +83,7 @@ class TranscriptionService:
             elif hasattr(response, '__dict__'):
                 response = response.__dict__
 
-            # Extract enhanced transcript with speaker information
+            # Extract enhanced transcript
             if "results" not in response:
                 logger.error(f"No 'results' key in response. Available keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
                 return None
@@ -79,27 +94,19 @@ class TranscriptionService:
                 
             result = response["results"]["channels"][0]["alternatives"][0]
             
-            # Check if we have utterances (with speaker diarization)
-            if ("utterances" in response["results"] and 
-                response["results"]["utterances"] and 
-                len(response["results"]["utterances"]) > 0):
-                # Format transcript with speaker labels
-                formatted_transcript = self._format_transcript_with_speakers(
-                    response["results"]["utterances"]
-                )
-                logger.info(f"Found {len(response['results']['utterances'])} utterances with speaker diarization")
-            else:
-                # Fallback to basic transcript
-                formatted_transcript = result.get("transcript", "")
-                logger.info("No utterances found, using basic transcript")
+            # Log detected language if available
+            if "detected_language" in result:
+                detected_lang = result["detected_language"]
+                logger.info(f"Detected language: {detected_lang}")
+            
+            # Process transcript based on available features
+            formatted_transcript = await self._process_enhanced_transcript(response["results"], settings)
 
             if not formatted_transcript.strip():
                 logger.warning("Empty transcript received from Deepgram")
                 return None
 
-            logger.info(
-                f"Successfully transcribed audio file: {len(formatted_transcript)} characters"
-            )
+            logger.info(f"Successfully transcribed audio file: {len(formatted_transcript)} characters")
             return formatted_transcript
 
         except asyncio.TimeoutError:
@@ -109,9 +116,108 @@ class TranscriptionService:
             logger.error(f"Error transcribing audio: {e}", exc_info=True)
             return None
 
+    async def _process_enhanced_transcript(self, results: dict, settings) -> str:
+        """
+        Process transcript with enhanced formatting using paragraphs and speaker information.
+        
+        Args:
+            results: Deepgram results dictionary
+            settings: Application settings
+            
+        Returns:
+            Enhanced formatted transcript
+        """
+        try:
+            alternative = results["channels"][0]["alternatives"][0]
+            
+            # Check if we have paragraphs (preferred method)
+            if ("paragraphs" in alternative and 
+                alternative["paragraphs"] and 
+                "paragraphs" in alternative["paragraphs"] and
+                len(alternative["paragraphs"]["paragraphs"]) > 0):
+                
+                logger.info(f"Processing {len(alternative['paragraphs']['paragraphs'])} paragraphs with enhanced formatting")
+                return self._format_transcript_with_paragraphs(alternative["paragraphs"]["paragraphs"], settings)
+            
+            # Fallback: Check for utterances if paragraphs not available
+            elif ("utterances" in results and 
+                  results["utterances"] and 
+                  len(results["utterances"]) > 0):
+                
+                logger.info(f"Fallback: Processing {len(results['utterances'])} utterances")
+                return self._format_transcript_with_speakers(results["utterances"])
+            
+            # Final fallback: Basic transcript
+            else:
+                basic_transcript = alternative.get("transcript", "")
+                logger.info("Using basic transcript (no paragraphs or speaker info available)")
+                return basic_transcript
+                
+        except Exception as e:
+            logger.error(f"Error processing enhanced transcript: {e}")
+            # Return basic transcript as ultimate fallback
+            return results["channels"][0]["alternatives"][0].get("transcript", "")
+
+    def _format_transcript_with_paragraphs(self, paragraphs: list, settings) -> str:
+        """
+        Format transcript using paragraphs with speaker information for better readability.
+        
+        Args:
+            paragraphs: List of paragraph objects from Deepgram
+            settings: Application settings
+            
+        Returns:
+            Well-formatted transcript with paragraphs and speaker labels
+        """
+        formatted_sections = []
+        
+        for paragraph in paragraphs:
+            sentences = paragraph.get("sentences", [])
+            if not sentences:
+                continue
+            
+            # Group sentences by speaker within each paragraph
+            current_speaker = None
+            current_section = []
+            
+            for sentence in sentences:
+                text = sentence.get("text", "").strip()
+                speaker = sentence.get("speaker", None) if settings.enable_diarization else None
+                
+                if not text:
+                    continue
+                
+                # If speaker changed or this is the first sentence
+                if speaker is not None and speaker != current_speaker:
+                    # Save previous section if exists
+                    if current_section:
+                        speaker_label = f"Speaker {current_speaker}" if current_speaker is not None else ""
+                        section_text = " ".join(current_section)
+                        if speaker_label:
+                            formatted_sections.append(f"{speaker_label}: {section_text}")
+                        else:
+                            formatted_sections.append(section_text)
+                        current_section = []
+                    
+                    current_speaker = speaker
+                
+                current_section.append(text)
+            
+            # Add the last section of this paragraph
+            if current_section:
+                speaker_label = f"Speaker {current_speaker}" if current_speaker is not None and settings.enable_diarization else ""
+                section_text = " ".join(current_section)
+                if speaker_label:
+                    formatted_sections.append(f"{speaker_label}: {section_text}")
+                else:
+                    formatted_sections.append(section_text)
+        
+        # Join sections with double line breaks for better paragraph separation
+        return "\n\n".join(formatted_sections)
+
     def _format_transcript_with_speakers(self, utterances: list) -> str:
         """
-        Format transcript with speaker labels and enhanced formatting.
+        Format transcript with speaker labels (fallback method).
         
         Args:
             utterances: List of utterances from Deepgram response
@@ -126,7 +232,6 @@ class TranscriptionService:
             transcript = utterance.get("transcript", "").strip()
             
             if transcript:
-                # Format with speaker label
                 formatted_lines.append(f"Speaker {speaker}: {transcript}")
         
         return "\n\n".join(formatted_lines)

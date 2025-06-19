@@ -118,7 +118,7 @@ Structure your response as:
 - Action 3
 
 Transcript:
-{clean_transcript[:4000]}"""  # Limit transcript length to avoid token limits
+{clean_transcript}"""  # Full transcript sent without artificial length limitations
 
             summary = await self.ai_model.generate_text(prompt)
             

@@ -45,15 +45,15 @@ class Settings(BaseSettings):
         default=3600, alias="DEEPGRAM_TIMEOUT_SECONDS"
     )  # 60 minutes for large files
     
-    # Advanced Deepgram features
-    enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")
-    enable_punctuation: bool = Field(default=True, alias="ENABLE_PUNCTUATION")
-    enable_paragraphs: bool = Field(default=True, alias="ENABLE_PARAGRAPHS")
-    enable_utterances: bool = Field(default=True, alias="ENABLE_UTTERANCES")
-    enable_smart_format: bool = Field(default=True, alias="ENABLE_SMART_FORMAT")
+    # Advanced Deepgram features - optimized for paragraph-based transcription
+    enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")  # Speaker identification
+    enable_punctuation: bool = Field(default=True, alias="ENABLE_PUNCTUATION")  # Add punctuation
+    enable_paragraphs: bool = Field(default=True, alias="ENABLE_PARAGRAPHS")  # Group into logical paragraphs
+    enable_utterances: bool = Field(default=False, alias="ENABLE_UTTERANCES")  # Disabled in favor of paragraphs
+    enable_smart_format: bool = Field(default=True, alias="ENABLE_SMART_FORMAT")  # Enhanced formatting
     enable_profanity_filter: bool = Field(default=False, alias="ENABLE_PROFANITY_FILTER")
     enable_redaction: bool = Field(default=False, alias="ENABLE_REDACTION")
-    enable_filler_words: bool = Field(default=True, alias="ENABLE_FILLER_WORDS")
+    enable_filler_words: bool = Field(default=True, alias="ENABLE_FILLER_WORDS")  # Keep for natural flow
 
     # AI Model settings
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")

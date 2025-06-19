@@ -55,7 +55,7 @@ class ClaudeModel(AIModel):
         try:
             message = await self.client.messages.create(
                 model=self.model_name,
-                max_tokens=4000,  # Keep reasonable limit for Claude
+                max_tokens=64000,  # Use maximum allowed for Claude Sonnet 4 (64k tokens)
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
             )

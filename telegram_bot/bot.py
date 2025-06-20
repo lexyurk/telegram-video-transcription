@@ -174,8 +174,9 @@ Just send me a file and I'll handle the rest! 🚀
             return
 
         # Send processing message
+        escaped_file_name = self._escape_markdown(file_name)
         processing_msg = await update.message.reply_text(
-            f"🔄 **Processing {file_name}**\n\n"
+            f"🔄 **Processing {escaped_file_name}**\n\n"
             f"📁 Size: {file_size_mb:.1f}MB\n"
             f"⏳ This will take a few minutes...",
             parse_mode="Markdown",
@@ -186,7 +187,7 @@ Just send me a file and I'll handle the rest! 🚀
         try:
             # Use MTProto for all file downloads (supports files up to 2GB)
             await processing_msg.edit_text(
-                f"🔄 **Processing {file_name}**\n\n"
+                f"🔄 **Processing {escaped_file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"📥 Downloading...",
                 parse_mode="Markdown",
@@ -203,7 +204,7 @@ Just send me a file and I'll handle the rest! 🚀
                     last_progress = progress
                     try:
                         await processing_msg.edit_text(
-                            f"🔄 **Processing {file_name}**\n\n"
+                            f"🔄 **Processing {escaped_file_name}**\n\n"
                             f"📁 Size: {file_size_mb:.1f}MB\n"
                             f"📥 Downloading... {progress}%",
                             parse_mode="Markdown",
@@ -218,7 +219,7 @@ Just send me a file and I'll handle the rest! 🚀
             
             if not temp_file_path:
                 await processing_msg.edit_text(
-                    f"❌ **Failed to download {file_name}**\n\n"
+                    f"❌ **Failed to download {escaped_file_name}**\n\n"
                     f"Could not download the file. Please try again.",
                     parse_mode="Markdown",
                 )
@@ -229,7 +230,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             # Start transcription
             await processing_msg.edit_text(
-                f"🔄 **Processing {file_name}**\n\n"
+                f"🔄 **Processing {escaped_file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"🎙️ Transcribing...",
                 parse_mode="Markdown",
@@ -240,7 +241,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             if not transcript:
                 await processing_msg.edit_text(
-                    f"❌ **Could not transcribe {file_name}**\n\n"
+                    f"❌ **Could not transcribe {escaped_file_name}**\n\n"
                     f"This might be due to audio quality or format issues.\n"
                     f"Please try with a different file.",
                     parse_mode="Markdown",
@@ -249,7 +250,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             # Update progress for speaker identification
             await processing_msg.edit_text(
-                f"🔄 **Processing {file_name}**\n\n"
+                f"🔄 **Processing {escaped_file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"👥 Identifying speakers...",
                 parse_mode="Markdown",
@@ -268,7 +269,7 @@ Just send me a file and I'll handle the rest! 🚀
 
             # Update progress
             await processing_msg.edit_text(
-                f"🔄 **Processing {file_name}**\n\n"
+                f"🔄 **Processing {escaped_file_name}**\n\n"
                 f"📁 Size: {file_size_mb:.1f}MB\n"
                 f"📝 Creating summary...",
                 parse_mode="Markdown",
@@ -281,7 +282,7 @@ Just send me a file and I'll handle the rest! 🚀
                     document=transcript_file,
                     filename=transcript_filename,
                     caption=f"📄 **Transcript ready!**\n\n"
-                    f"From: {file_name}",
+                    f"From: {escaped_file_name}",
                     parse_mode="Markdown",
                 )
 
@@ -341,19 +342,19 @@ Just send me a file and I'll handle the rest! 🚀
 
                 try:
                     await processing_msg.edit_text(
-                        f"✅ **{file_name} processed successfully!**\n\n"
+                        f"✅ **{escaped_file_name} processed successfully!**\n\n"
                         f"📄 Transcript and summary are ready above.",
                         parse_mode="Markdown",
                     )
                 except Exception as e:
                     logger.warning(f"Failed to send success message with Markdown: {e}")
                     await processing_msg.edit_text(
-                        f"✅ {file_name} processed successfully!\n\n"
+                        f"✅ {escaped_file_name} processed successfully!\n\n"
                         f"📄 Transcript and summary are ready above.",
                     )
             else:
                 await processing_msg.edit_text(
-                    f"✅ **{file_name} transcribed!**\n\n"
+                    f"✅ **{escaped_file_name} transcribed!**\n\n"
                     f"📄 Transcript is ready above.\n"
                     f"⚠️ Summary generation failed, but you have the full transcript.",
                     parse_mode="Markdown",
@@ -366,7 +367,7 @@ Just send me a file and I'll handle the rest! 🚀
         except Exception as e:
             logger.error(f"Error processing file for user {user_id}: {e}", exc_info=True)
             await processing_msg.edit_text(
-                f"❌ **Error processing {file_name}**\n\n"
+                f"❌ **Error processing {escaped_file_name}**\n\n"
                 f"Error: {str(e)}\n\n"
                 f"Please try again with a different file.",
                 parse_mode="Markdown",
@@ -423,6 +424,25 @@ Just send me a file and I'll handle the rest! 🚀
         }
 
         return extension in supported_extensions
+
+    def _escape_markdown(self, text: str) -> str:
+        """
+        Escape special markdown characters in text to prevent parsing errors.
+        
+        Args:
+            text: Text that might contain markdown special characters
+            
+        Returns:
+            Text with markdown special characters escaped
+        """
+        if not text:
+            return text
+            
+        # Escape markdown special characters
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in special_chars:
+            text = text.replace(char, f'\\{char}')
+        return text
 
     def _split_message(self, message: str, max_length: int) -> list[str]:
         """Split a long message into chunks."""

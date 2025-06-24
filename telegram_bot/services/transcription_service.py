@@ -37,69 +37,45 @@ class TranscriptionService:
         try:
             settings = get_settings()
             
-            # Configure Deepgram options with optimal settings
             options = PrerecordedOptions(
                 model=settings.deepgram_model,
-                # Language detection and formatting
-                detect_language=True,  # Auto-detect language
-                smart_format=settings.enable_smart_format,  # Better formatting (dates, numbers, etc.)
-                punctuate=settings.enable_punctuation,  # Add punctuation
-                
-                # Content structure - use both paragraphs and utterances
-                paragraphs=settings.enable_paragraphs,  # Group content into logical paragraphs
-                utterances=True,  # Keep as fallback for speaker diarization
-                
-                # Speaker identification
-                diarize=settings.enable_diarization,  # Enable speaker identification
-                
-                # Audio processing enhancements
-                filler_words=settings.enable_filler_words,  # Include filler words for natural flow
+                detect_language=True,
+                smart_format=settings.enable_smart_format,
+                punctuate=settings.enable_punctuation,
+                paragraphs=settings.enable_paragraphs,
+                diarize=settings.enable_diarization,
+                filler_words=settings.enable_filler_words,
                 profanity_filter=settings.enable_profanity_filter,
-                redact=settings.enable_redaction,
-                
-                # Enhanced audio processing for better detection
-                numerals=True,  # Convert numbers to numerals
-                dictation=True,  # Better for dictated content
-                utt_split=0.8,  # More sensitive utterance splitting
-                
-                # Remove encoding constraints to let Deepgram handle it automatically
-                # encoding="linear16",  # Removed - let Deepgram auto-detect
-                # sample_rate=16000,  # Removed - let Deepgram auto-detect
             )
 
-            # Read the file and create payload
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
 
             payload = {"buffer": buffer_data}
             
-            # Calculate dynamic timeout based on file size (roughly 2 minutes per MB + base time)
             file_size_mb = len(buffer_data) / (1024 * 1024)
-            dynamic_timeout = max(300, int(file_size_mb * 120) + 300)  # At least 5 minutes, plus 2 min per MB
-            actual_timeout = min(dynamic_timeout, self.timeout_seconds)  # Don't exceed configured max
+            dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
+            actual_timeout = min(dynamic_timeout, self.timeout_seconds)
 
             logger.info(f"Starting enhanced transcription for file: {file_path} ({len(buffer_data)} bytes)")
-            logger.info(f"Features enabled: diarization={settings.enable_diarization}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
+            logger.info(f"Features enabled: diarization={settings.enable_diarization}, punctuation={settings.enable_punctuation}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
             logger.info(f"File size: {file_size_mb:.1f}MB, Dynamic timeout: {actual_timeout}s (calculated: {dynamic_timeout}s, max: {self.timeout_seconds}s)")
 
-            # Use direct timeout approach as suggested - pass timeout directly to transcribe_file
             try:
-                # Create timeout configuration for large file uploads
                 timeout_config = httpx.Timeout(
-                    connect=60.0,      # 60 seconds to establish connection
-                    read=actual_timeout,  # Long read timeout for processing
-                    write=600.0,       # 10 minutes for writing/uploading large files
-                    pool=10.0          # 10 seconds to get connection from pool
+                    connect=60.0,
+                    read=actual_timeout,
+                    write=600.0,
+                    pool=10.0
                 )
                 
-                logger.info(f"Using direct timeout approach: connect=60s, read={actual_timeout}s, write=600s, pool=10s")
+                logger.info(f"Using timeout: connect=60s, read={actual_timeout}s, write=600s, pool=10s")
                 
-                # Call transcribe_file with direct timeout parameter
                 response = await asyncio.to_thread(
                     self.client.listen.prerecorded.v("1").transcribe_file,
                     payload,
                     options,
-                    timeout=timeout_config  # Pass timeout directly to the method
+                    timeout=timeout_config
                 )
             except Exception as e:
                 error_msg = str(e).lower()
@@ -113,13 +89,11 @@ class TranscriptionService:
 
             logger.info("Received response from Deepgram, processing...")
             
-            # Convert Deepgram response object to dict if needed
             if hasattr(response, 'to_dict'):
                 response = response.to_dict()
             elif hasattr(response, '__dict__'):
                 response = response.__dict__
 
-            # Extract enhanced transcript
             if "results" not in response:
                 logger.error(f"No 'results' key in response. Available keys: {list(response.keys()) if hasattr(response, 'keys') else 'No keys'}")
                 return None
@@ -130,23 +104,19 @@ class TranscriptionService:
                 
             result = response["results"]["channels"][0]["alternatives"][0]
             
-            # Log detected language if available
             if "detected_language" in result:
                 detected_lang = result["detected_language"]
                 logger.info(f"Detected language: {detected_lang}")
             else:
                 logger.warning("No language detected in response")
             
-            # Log confidence and other metadata
             confidence = result.get("confidence", 0)
             logger.info(f"Transcription confidence: {confidence}")
             
-            # Debug: Log raw response structure for troubleshooting
             logger.debug(f"Raw alternative keys: {list(result.keys())}")
             logger.debug(f"Raw result confidence: {result.get('confidence', 'N/A')}")
             logger.debug(f"Raw basic transcript (first 100 chars): '{result.get('transcript', '')[:100]}'")
             
-            # Process transcript based on available features
             formatted_transcript = await self._process_enhanced_transcript(response["results"], settings)
 
             if not formatted_transcript.strip():
@@ -177,11 +147,8 @@ class TranscriptionService:
         try:
             alternative = results["channels"][0]["alternatives"][0]
             
-            # Debug logging to understand the response structure
             logger.info(f"Available keys in alternative: {list(alternative.keys())}")
             logger.info(f"Available keys in results: {list(results.keys())}")
-            
-            # Check if we have paragraphs (preferred method)
             if "paragraphs" in alternative:
                 paragraphs_data = alternative["paragraphs"]
                 logger.info(f"Found paragraphs key. Type: {type(paragraphs_data)}")
@@ -196,7 +163,6 @@ class TranscriptionService:
                         else:
                             logger.warning(f"Paragraphs list is empty or None: {actual_paragraphs}")
                     
-                    # Check if there's a pre-formatted transcript in paragraphs
                     if "transcript" in paragraphs_data:
                         paragraphs_transcript = paragraphs_data["transcript"]
                         logger.info(f"Found paragraphs transcript. Length: {len(paragraphs_transcript) if paragraphs_transcript else 0}")
@@ -216,7 +182,7 @@ class TranscriptionService:
             else:
                 logger.warning("No 'paragraphs' key found in alternative")
             
-            # Fallback: Check for utterances if paragraphs not available
+
             if ("utterances" in results and 
                 results["utterances"] and 
                 len(results["utterances"]) > 0):
@@ -226,7 +192,7 @@ class TranscriptionService:
             else:
                 logger.warning(f"No utterances available. Utterances in results: {'utterances' in results}, utterances value: {results.get('utterances', 'Missing')}")
             
-            # Final fallback: Basic transcript
+
             basic_transcript = alternative.get("transcript", "")
             logger.info(f"Using basic transcript (no paragraphs or speaker info available). Length: {len(basic_transcript)}")
             if not basic_transcript:
@@ -262,7 +228,7 @@ class TranscriptionService:
         
         for paragraph in paragraphs:
             sentences = paragraph.get("sentences", [])
-            speaker = paragraph.get("speaker", 0)  # Speaker is at paragraph level
+            speaker = paragraph.get("speaker", 0)
             
             if not sentences:
                 continue

@@ -125,6 +125,9 @@ The bot includes an intelligent speaker identification system:
    GOOGLE_API_KEY=your_google_key
    ANTHROPIC_API_KEY=your_anthropic_key
    
+   # Analytics (optional but recommended)
+   POSTHOG_API_KEY=your_posthog_api_key
+   
    # Optional (defaults shown)
    MAX_FILE_SIZE_MB=2048
    LOG_LEVEL=INFO

@@ -20,7 +20,7 @@ from telegram_bot.services import (
     TranscriptionService, 
     SummarizationService,
     SpeakerIdentificationService,
-    get_metrics_service,
+    get_analytics_service,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 
@@ -35,7 +35,7 @@ class TelegramTranscriptionBot:
         self.speaker_identification_service = SpeakerIdentificationService()
         self.file_service = FileService()
         self.mtproto_downloader = MTProtoDownloader()
-        self.metrics_service = get_metrics_service()
+        self.analytics_service = get_analytics_service()
 
     async def initialize(self) -> None:
         """Initialize the bot services."""
@@ -80,17 +80,12 @@ Just send me a file and I'll handle the rest! 🚀
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
         logger.info(f"User {update.effective_user.id} started the bot")
         
-        # Track user and interaction
-        await self.metrics_service.track_user(
+        # Track user started bot
+        await self.analytics_service.track_user_started_bot(
             update.effective_user.id, 
             update.effective_user.username, 
             update.effective_user.first_name,
             update.effective_user.last_name
-        )
-        await self.metrics_service.track_interaction(
-            update.effective_user.id, 
-            "start", 
-            f"Bot started by user"
         )
 
     async def help_command(
@@ -100,10 +95,8 @@ Just send me a file and I'll handle the rest! 🚀
         await self.start_command(update, context)
         
         # Track help command interaction
-        await self.metrics_service.track_interaction(
-            update.effective_user.id, 
-            "help", 
-            "Help command used"
+        await self.analytics_service.track_help_requested(
+            update.effective_user.id
         )
 
     async def handle_file(
@@ -180,18 +173,14 @@ Just send me a file and I'll handle the rest! 🚀
             
         file_size_mb = file_size / (1024 * 1024)
         settings = get_settings()
+        file_extension = os.path.splitext(file_name)[1].lower()
         
-        # Track user and file upload
-        await self.metrics_service.track_user(
+        # Track file upload
+        await self.analytics_service.track_file_uploaded(
             user_id, 
-            update.effective_user.username, 
-            update.effective_user.first_name,
-            update.effective_user.last_name
-        )
-        await self.metrics_service.track_interaction(
-            user_id, 
-            "file_upload", 
-            f"Uploaded: {file_name} ({file_size_mb:.1f}MB)"
+            file_name, 
+            file_size_mb, 
+            file_extension
         )
         
         # Check if file is too large (over 2GB)
@@ -219,10 +208,9 @@ Just send me a file and I'll handle the rest! 🚀
 
         temp_files_to_cleanup = []
         
-        # Track file processing start
-        file_extension = os.path.splitext(file_name)[1].lower()
-        processing_event_id = await self.metrics_service.track_file_processing_start(
-            user_id, file_name, file_size_mb, file_extension
+        # Track transcription start
+        await self.analytics_service.track_transcription_started(
+            user_id, file_name, file_size_mb
         )
         processing_start_time = datetime.now()
 
@@ -408,11 +396,13 @@ Just send me a file and I'll handle the rest! 🚀
             
             # Track successful completion
             processing_time = (datetime.now() - processing_start_time).total_seconds()
-            await self.metrics_service.track_file_processing_complete(
-                processing_event_id, processing_time
+            await self.analytics_service.track_transcription_completed(
+                user_id, file_name, file_size_mb, processing_time
             )
-            # Update daily stats
-            await self.metrics_service.update_daily_stats()
+            # Track summary generation
+            await self.analytics_service.track_summary_generated(
+                user_id, file_name
+            )
 
         except Exception as e:
             logger.error(f"Error processing file for user {user_id}: {e}", exc_info=True)
@@ -424,11 +414,9 @@ Just send me a file and I'll handle the rest! 🚀
             )
             
             # Track failed processing
-            await self.metrics_service.track_file_processing_failed(
-                processing_event_id, str(e)
+            await self.analytics_service.track_transcription_failed(
+                user_id, file_name, file_size_mb, str(e)
             )
-            # Update daily stats
-            await self.metrics_service.update_daily_stats()
         finally:
             # Cleanup all temporary files
             for temp_file in temp_files_to_cleanup:
@@ -450,10 +438,9 @@ Just send me a file and I'll handle the rest! 🚀
         )
         
         # Track unsupported message
-        await self.metrics_service.track_interaction(
+        await self.analytics_service.track_unsupported_file(
             update.effective_user.id, 
-            "unsupported_message", 
-            f"Unsupported message type: {update.message.effective_attachment or 'text'}"
+            message_type=str(update.message.effective_attachment or 'text')
         )
 
     def _is_supported_file_type(self, filename: str | None) -> bool:

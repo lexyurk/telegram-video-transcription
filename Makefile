@@ -54,4 +54,17 @@ dev-setup: install ## Set up development environment
 	@echo "1. Copy .env.example to .env and fill in your API keys"
 	@echo "2. Run 'make run' to start the bot"
 	@echo "3. Run 'make test' to run tests"
-	@echo "4. Run 'make check' to run all quality checks" 
+	@echo "4. Run 'make check' to run all quality checks"
+
+metrics-test: ## Generate sample metrics data for testing
+	uv run python scripts/test_metrics.py
+
+metrics-dashboard: ## Show metrics dashboard in terminal
+	uv run python scripts/metrics_dashboard.py
+
+metrics-web: ## Start web dashboard (requires Flask)
+	uv run python scripts/web_dashboard.py
+
+metrics-clean: ## Clean metrics database
+	rm -f temp/metrics.db
+	@echo "Metrics database cleaned!" 

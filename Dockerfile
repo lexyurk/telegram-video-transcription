@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# Install additional dependencies for Playwright (used by mermaid-cli)
+# Install additional dependencies for Chrome/Puppeteer
 RUN apt-get update && apt-get install -y \
     libgconf-2-4 \
     libgtk-3-0 \
@@ -33,6 +33,16 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libpango-1.0-0 \
     libcairo2 \
+    libnspr4 \
+    libnss3 \
+    libxcursor1 \
+    libxi6 \
+    libxrender1 \
+    libxft2 \
+    libxinerama1 \
+    fonts-liberation \
+    libu2f-udev \
+    libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install mermaid-cli globally  

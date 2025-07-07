@@ -187,6 +187,44 @@ Transcript:
             logger.error(f"Error generating mermaid code: {e}", exc_info=True)
             return None
 
+    def _get_puppeteer_config(self) -> str:
+        """Get Puppeteer configuration for cloud/containerized environments."""
+        # Default Puppeteer args for headless environments
+        puppeteer_args = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--no-first-run",
+            "--no-zygote",
+            "--single-process",
+            "--disable-gpu",
+            "--disable-extensions",
+            "--disable-default-apps",
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--disable-features=TranslateUI",
+            "--disable-ipc-flooding-protection",
+            "--headless=new"
+        ]
+        
+        # Check for Chrome executable path from environment
+        chrome_path = os.environ.get('CHROME_BIN') or os.environ.get('PUPPETEER_EXECUTABLE_PATH')
+        
+        config = {
+            "args": puppeteer_args,
+            "headless": "new",
+            "defaultViewport": {"width": 1200, "height": 800}
+        }
+        
+        if chrome_path:
+            config["executablePath"] = chrome_path
+            logger.info(f"Using Chrome executable from environment: {chrome_path}")
+        
+        import json
+        return json.dumps(config)
+
     async def _convert_mermaid_to_image(self, mermaid_code: str) -> Optional[str]:
         """Convert mermaid code to image using mermaid-cli."""
         try:
@@ -201,6 +239,10 @@ Transcript:
 
             try:
                 # Use mermaid-cli to convert to image with forest theme
+                # Add Puppeteer configuration for cloud/containerized environments
+                puppeteer_config = self._get_puppeteer_config()
+                logger.info(f"Using Puppeteer config: {puppeteer_config}")
+                
                 cmd = [
                     "mmdc",
                     "-i", mmd_file_path,
@@ -208,7 +250,8 @@ Transcript:
                     "-t", "forest",  # Use forest theme (green/blue colors)
                     "-b", "#f8f9fa",  # Light gray background
                     "--width", "1200",  # Larger width for better readability
-                    "--height", "800"  # Larger height
+                    "--height", "800",  # Larger height
+                    "--puppeteerConfig", puppeteer_config
                 ]
                 
                 process = await asyncio.create_subprocess_exec(
@@ -241,7 +284,8 @@ Transcript:
                         "-t", "forest",
                         "-b", "#f8f9fa",
                         "--width", "1200",
-                        "--height", "800"
+                        "--height", "800",
+                        "--puppeteerConfig", self._get_puppeteer_config()
                     ]
                     
                     simple_process = await asyncio.create_subprocess_exec(

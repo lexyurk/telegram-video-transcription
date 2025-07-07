@@ -51,28 +51,34 @@ class DiagramService:
         lines = mermaid_code.split('\n')
         fixed_lines = []
         
+        # Define safe color mappings
+        safe_colors = {
+            'primary': 'fill:#e1f5fe,stroke:#01579b,stroke-width:2px',
+            'secondary': 'fill:#f3e5f5,stroke:#4a148c,stroke-width:2px', 
+            'accent': 'fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px',
+            'default': 'fill:#fff3e0,stroke:#e65100,stroke-width:2px'
+        }
+        
         for line in lines:
-            # Fix incomplete hex colors in classDef
-            line = re.sub(r'#([0-9A-Fa-f]{1,2})(?=\s|,|$)', r'#\1\1\1', line)
-            line = re.sub(r'#([0-9A-Fa-f]{3})(?=\s|,|$)', r'#\1\1', line)
-            
-            # Remove invalid classDef lines that might cause issues
-            if 'classDef' in line and (len(line.split(':')) < 2 or '#' not in line):
-                continue
-                
-            # Fix malformed classDef syntax but preserve good ones
+            # Check if this is a classDef line
             if line.strip().startswith('classDef'):
-                # If it already has proper format with fill: and stroke:, keep it
-                if 'fill:' in line and 'stroke:' in line and '#' in line:
-                    # This looks like a good classDef, keep it as is
-                    pass
-                else:
-                    # Fix malformed classDef
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        class_name = parts[1]
-                        # Use one of our safe color schemes
-                        line = f"    classDef {class_name} fill:#e1f5fe,stroke:#01579b,stroke-width:2px"
+                parts = line.split()
+                if len(parts) >= 2:
+                    class_name = parts[1]
+                    # Replace with safe color definition
+                    if class_name in safe_colors:
+                        line = f"    classDef {class_name} {safe_colors[class_name]}"
+                    else:
+                        # Use default colors for any unknown class
+                        line = f"    classDef {class_name} {safe_colors['default']}"
+            
+            # Remove any obviously broken lines with incomplete hex colors
+            if '#' in line and re.search(r'#[0-9A-Fa-f]{1,5}(?=\s|,|;|$)', line):
+                # Check if it's an incomplete hex color (less than 6 digits)
+                incomplete_hex = re.search(r'#([0-9A-Fa-f]{1,5})(?=\s|,|;|$)', line)
+                if incomplete_hex and len(incomplete_hex.group(1)) < 6:
+                    # Skip this line entirely if it has incomplete hex colors
+                    continue
             
             fixed_lines.append(line)
         

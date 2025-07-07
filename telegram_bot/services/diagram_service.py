@@ -46,7 +46,7 @@ class DiagramService:
 
     def _create_generic_diagram_prompt(self, transcript: str) -> str:
         """Create a generic prompt for diagram generation."""
-        return f"""Based on the following transcript, create a mermaid diagram that best represents the main topics, relationships, and flow of the conversation.
+        return f"""Based on the following transcript, create a beautiful, well-styled mermaid diagram that best represents the main topics, relationships, and flow of the conversation.
 
 IMPORTANT RULES:
 1. Generate ONLY the mermaid diagram code - no explanations or markdown formatting
@@ -57,9 +57,19 @@ IMPORTANT RULES:
    - For conversations between people: use sequenceDiagram
    - For organizational structures: use graph or mindmap
    - For timelines: use timeline or gantt
-4. Keep node labels concise but meaningful
+4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
+7. APPLY BEAUTIFUL STYLING:
+   - Use meaningful node shapes: rectangles [], rounded (), diamonds {{}}, circles ((()))
+   - Add colors with classDef: classDef className fill:#color,stroke:#color,color:#fff
+   - Apply classes to nodes: A:::className
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
+
+STYLING EXAMPLES:
+- For flowcharts: Add classDef and apply colors
+- For sequence diagrams: Use participant aliases and notes
+- Make it visually appealing with proper spacing and colors
 
 Analyze the transcript and determine what type of diagram would best represent the content. Common patterns:
 - If discussing system architecture → flowchart showing components and connections
@@ -73,7 +83,7 @@ Transcript:
 
     def _create_custom_diagram_prompt(self, transcript: str, custom_prompt: str) -> str:
         """Create a custom prompt for diagram generation."""
-        return f"""Based on the following transcript, create a mermaid diagram with the following specifications:
+        return f"""Based on the following transcript, create a beautiful, well-styled mermaid diagram with the following specifications:
 
 USER REQUIREMENTS: {custom_prompt}
 
@@ -81,9 +91,19 @@ IMPORTANT RULES:
 1. Generate ONLY the mermaid diagram code - no explanations or markdown formatting
 2. Start directly with the diagram type (e.g., "flowchart TD", "graph TD", "sequenceDiagram", etc.)
 3. Follow the user's requirements about what should be included in the diagram
-4. Keep node labels concise but meaningful
+4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
+7. APPLY BEAUTIFUL STYLING:
+   - Use meaningful node shapes: rectangles [], rounded (), diamonds {{}}, circles ((()))
+   - Add colors with classDef: classDef className fill:#color,stroke:#color,color:#fff
+   - Apply classes to nodes: A:::className
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
+
+STYLING EXAMPLES:
+- For flowcharts: Add classDef and apply colors
+- For sequence diagrams: Use participant aliases and notes
+- Make it visually appealing with proper spacing and colors
 
 Transcript:
 {transcript}"""
@@ -145,16 +165,16 @@ Transcript:
             output_path = f"/tmp/diagram_{timestamp}.png"
 
             try:
-                # Use mermaid-cli to convert to image with proper browser config
+                # Use mermaid-cli to convert to image with better styling
                 cmd = [
                     "mmdc",
                     "-i", mmd_file_path,
                     "-o", output_path,
                     "-t", "dark",  # Use dark theme
-                    "-b", "transparent",  # Transparent background
-                    "--width", "1024",
-                    "--height", "768",
-                    "--puppeteerConfig", '{"args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]}'
+                    "-b", "white",  # White background for better contrast
+                    "--width", "1200",  # Larger width for better readability
+                    "--height", "800",  # Larger height
+                    "-s", "2"  # Scale factor for higher quality
                 ]
                 
                 process = await asyncio.create_subprocess_exec(
@@ -178,16 +198,16 @@ Transcript:
                     logger.error(f"Stdout: {stdout.decode()}")
                     logger.error(f"Stderr: {stderr.decode()}")
                     
-                    # Try alternative approach without puppeteerConfig
-                    logger.info("Trying alternative approach without puppeteerConfig...")
+                    # Try alternative approach with simpler command
+                    logger.info("Trying alternative approach with simpler command...")
                     simple_cmd = [
                         "mmdc",
                         "-i", mmd_file_path,
                         "-o", output_path,
                         "-t", "dark",
-                        "-b", "transparent",
-                        "--width", "1024",
-                        "--height", "768"
+                        "-b", "white",
+                        "--width", "1200",
+                        "--height", "800"
                     ]
                     
                     simple_process = await asyncio.create_subprocess_exec(

@@ -44,6 +44,35 @@ class DiagramService:
         
         return ' '.join(cleaned_lines)
 
+    def _fix_mermaid_syntax(self, mermaid_code: str) -> str:
+        """Fix common mermaid syntax issues to prevent parsing errors."""
+        import re
+        
+        lines = mermaid_code.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # Fix incomplete hex colors in classDef
+            line = re.sub(r'#([0-9A-Fa-f]{1,2})(?=\s|,|$)', r'#\1\1\1', line)
+            line = re.sub(r'#([0-9A-Fa-f]{3})(?=\s|,|$)', r'#\1\1', line)
+            
+            # Remove invalid classDef lines that might cause issues
+            if 'classDef' in line and (len(line.split(':')) < 2 or '#' not in line):
+                continue
+                
+            # Fix malformed classDef syntax
+            if line.strip().startswith('classDef'):
+                # Ensure proper format: classDef className fill:#color,stroke:#color,color:#color
+                parts = line.split()
+                if len(parts) >= 2:
+                    class_name = parts[1]
+                    # Simple classDef with safe colors
+                    line = f"    classDef {class_name} fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#000"
+            
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+
     def _create_generic_diagram_prompt(self, transcript: str) -> str:
         """Create a generic prompt for diagram generation."""
         return f"""Based on the following transcript, create a beautiful, well-styled mermaid diagram that best represents the main topics, relationships, and flow of the conversation.
@@ -60,16 +89,11 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY BEAUTIFUL STYLING:
-   - Use meaningful node shapes: rectangles [], rounded (), diamonds {{}}, circles ((()))
-   - Add colors with classDef: classDef className fill:#color,stroke:#color,color:#fff
-   - Apply classes to nodes: A:::className
-   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
-
-STYLING EXAMPLES:
-- For flowcharts: Add classDef and apply colors
-- For sequence diagrams: Use participant aliases and notes
-- Make it visually appealing with proper spacing and colors
+7. APPLY SIMPLE STYLING:
+   - Use different node shapes: rectangles [], rounded (), diamonds {{}}
+   - Use different arrow styles: --> (solid), -.-> (dotted)
+   - Keep labels short and meaningful
+   - Focus on clear structure and flow
 
 Analyze the transcript and determine what type of diagram would best represent the content. Common patterns:
 - If discussing system architecture → flowchart showing components and connections
@@ -94,16 +118,11 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY BEAUTIFUL STYLING:
-   - Use meaningful node shapes: rectangles [], rounded (), diamonds {{}}, circles ((()))
-   - Add colors with classDef: classDef className fill:#color,stroke:#color,color:#fff
-   - Apply classes to nodes: A:::className
-   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
-
-STYLING EXAMPLES:
-- For flowcharts: Add classDef and apply colors
-- For sequence diagrams: Use participant aliases and notes
-- Make it visually appealing with proper spacing and colors
+7. APPLY SIMPLE STYLING:
+   - Use different node shapes: rectangles [], rounded (), diamonds {{}}
+   - Use different arrow styles: --> (solid), -.-> (dotted)
+   - Keep labels short and meaningful
+   - Focus on clear structure and flow
 
 Transcript:
 {transcript}"""
@@ -141,6 +160,9 @@ Transcript:
                     mermaid_code = mermaid_code[:-3]
                 
                 mermaid_code = mermaid_code.strip()
+                
+                # Validate and fix common mermaid syntax issues
+                mermaid_code = self._fix_mermaid_syntax(mermaid_code)
                 
                 logger.info(f"Successfully generated mermaid code: {len(mermaid_code)} characters")
                 return mermaid_code
@@ -239,6 +261,27 @@ Transcript:
             logger.error(f"Error converting mermaid to image: {e}", exc_info=True)
             return None
 
+    def _create_simple_diagram_prompt(self, transcript: str, custom_prompt: Optional[str] = None) -> str:
+        """Create a simple prompt for basic diagram generation without styling."""
+        base_prompt = f"""Based on the following transcript, create a simple mermaid diagram that represents the main topics and flow of the conversation.
+
+IMPORTANT RULES:
+1. Generate ONLY the mermaid diagram code - no explanations or markdown formatting
+2. Start directly with the diagram type (e.g., "flowchart TD", "sequenceDiagram", etc.)
+3. Keep it SIMPLE - no styling, no colors, no complex formatting
+4. Use basic node shapes only: rectangles [text], rounded (text)
+5. Use simple arrows: --> only
+6. Keep node labels short and clear (max 15 chars)
+7. Focus on clarity and correctness, not appearance
+
+"""
+        
+        if custom_prompt:
+            base_prompt += f"USER REQUIREMENTS: {custom_prompt}\n\n"
+        
+        base_prompt += f"Transcript:\n{transcript}"
+        return base_prompt
+
     async def create_diagram_from_transcript(self, transcript: str, custom_prompt: Optional[str] = None) -> Optional[str]:
         """
         Create a diagram image from transcript.
@@ -251,7 +294,7 @@ Transcript:
             Path to the generated image file or None if failed
         """
         try:
-            # Generate mermaid code
+            # Try to generate styled mermaid code first
             mermaid_code = await self._generate_mermaid_code(transcript, custom_prompt)
             
             if not mermaid_code:
@@ -261,11 +304,41 @@ Transcript:
             # Convert to image
             image_path = await self._convert_mermaid_to_image(mermaid_code)
             
-            if not image_path:
-                logger.error("Failed to convert mermaid to image")
-                return None
-
-            return image_path
+            if image_path:
+                return image_path
+            
+            # If styled version failed, try simple version
+            logger.info("Styled diagram failed, trying simple version...")
+            
+            # Generate simple diagram without styling
+            simple_prompt = self._create_simple_diagram_prompt(
+                self._remove_speaker_labels(transcript), custom_prompt
+            )
+            
+            simple_mermaid_code = await self.ai_model.generate_text(simple_prompt)
+            
+            if simple_mermaid_code:
+                # Clean up the code
+                simple_mermaid_code = simple_mermaid_code.strip()
+                if simple_mermaid_code.startswith('```mermaid'):
+                    simple_mermaid_code = simple_mermaid_code[10:]
+                if simple_mermaid_code.startswith('```'):
+                    simple_mermaid_code = simple_mermaid_code[3:]
+                if simple_mermaid_code.endswith('```'):
+                    simple_mermaid_code = simple_mermaid_code[:-3]
+                simple_mermaid_code = simple_mermaid_code.strip()
+                
+                logger.info(f"Generated simple mermaid code: {len(simple_mermaid_code)} characters")
+                
+                # Try to convert simple version
+                simple_image_path = await self._convert_mermaid_to_image(simple_mermaid_code)
+                
+                if simple_image_path:
+                    logger.info("Simple diagram generated successfully as fallback")
+                    return simple_image_path
+            
+            logger.error("Both styled and simple diagram generation failed")
+            return None
 
         except Exception as e:
             logger.error(f"Error creating diagram from transcript: {e}", exc_info=True)

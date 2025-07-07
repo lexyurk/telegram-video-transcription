@@ -13,6 +13,34 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs
+
+# Install additional dependencies for Playwright (used by mermaid-cli)
+RUN apt-get update && apt-get install -y \
+    libgconf-2-4 \
+    libgtk-3-0 \
+    libxss1 \
+    libasound2 \
+    libxtst6 \
+    libatspi2.0-0 \
+    libdrm2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxkbcommon0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install mermaid-cli globally
+RUN npm install -g @mermaid-js/mermaid-cli
+
+# Install Playwright chromium for mermaid-cli
+RUN npx playwright install chromium
+
 # Install uv
 RUN pip install uv
 

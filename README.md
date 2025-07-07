@@ -6,6 +6,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 
 - 🎥 **Video & Audio Transcription**: Supports multiple formats (MP4, AVI, MOV, MP3, WAV, etc.)
 - 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and AI models for summaries (Gemini 2.5 Flash by default, Claude support available)
+- 📊 **NEW: Diagram Generation**: Creates visual diagrams from transcripts using Mermaid (flowcharts, sequence diagrams, etc.)
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations
 - 👥 **Smart Speaker Names**: AI-powered detection of actual speaker names from conversations
@@ -52,6 +53,7 @@ The bot includes an intelligent speaker identification system:
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager
+- **Node.js 18+** and **npm** (for diagram generation)
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 - **Telegram API Credentials** (from [my.telegram.org](https://my.telegram.org/auth)) - Required for large file downloads
 - [Deepgram API Key](https://deepgram.com/)
@@ -87,7 +89,20 @@ The bot includes an intelligent speaker identification system:
    4. Create a new application
    5. Copy the `api_id` and `api_hash`
 
-4. **Run the bot**:
+4. **Set up diagram generation** (optional but recommended):
+   ```bash
+   # Run the automated setup script
+   ./scripts/setup_mermaid.sh
+   
+   # Or install manually:
+   npm install -g @mermaid-js/mermaid-cli
+   npx playwright install chromium
+   
+   # Test the installation
+   python3 scripts/test_mermaid.py
+   ```
+
+5. **Run the bot**:
    ```bash
    uv run python main.py
    ```
@@ -180,6 +195,37 @@ The bot includes an intelligent speaker identification system:
 
 - `/start` - Show welcome message and instructions
 - `/help` - Show help information
+- `/diagram` - Create a diagram from a transcript (reply to a .txt file)
+
+### 📊 Diagram Generation (NEW!)
+
+The bot now supports creating visual diagrams from transcripts using AI and Mermaid:
+
+#### How to Use:
+1. **Get a transcript** by sending a video/audio file to the bot
+2. **Reply to the transcript file** with `/diagram` 
+3. **Get a beautiful diagram** showing the main topics and relationships
+
+#### Usage Examples:
+- `/diagram` - Creates a generic diagram based on conversation content
+- `/diagram show the decision flow` - Creates a diagram focused on decision points
+- `/diagram map the relationships between people` - Creates a relationship diagram  
+- `/diagram create a system architecture` - Creates a technical system diagram
+
+#### Diagram Types:
+The AI automatically chooses the best diagram type based on your content:
+- **Flowcharts**: For processes, workflows, and decision trees
+- **Sequence Diagrams**: For conversations and interactions between people
+- **Graph Diagrams**: For relationships and connections
+- **System Diagrams**: For technical architectures and components
+- **Timeline Diagrams**: For chronological events
+
+#### Features:
+- 🎨 **Dark theme** with transparent background for better visibility
+- 🤖 **AI-powered** diagram type selection based on content
+- 🎯 **Custom prompts** to guide what the diagram should show
+- 📊 **High-quality PNG images** optimized for sharing
+- 🔄 **Automatic cleanup** of temporary files
 
 ## Development
 
@@ -270,6 +316,16 @@ For issues and questions:
 4. Check file format compatibility
 
 ## Changelog
+
+### v0.3.0
+- **NEW**: 📊 **Diagram Generation Feature** - Create visual diagrams from transcripts using AI and Mermaid
+- **NEW**: `/diagram` command - Reply to transcript files to generate diagrams
+- **NEW**: Custom diagram prompts - Guide what the diagram should show (e.g., `/diagram show decision flow`)
+- **NEW**: AI-powered diagram type selection - Automatically chooses best diagram type (flowchart, sequence, graph, etc.)
+- **NEW**: Mermaid-cli integration - High-quality PNG generation with dark theme
+- **NEW**: DiagramService - Clean service architecture for diagram generation
+- **ADDED**: Node.js and mermaid-cli setup scripts for easy installation
+- **ENHANCED**: Updated help messages and documentation with diagram examples
 
 ### v0.2.0
 - **NEW**: AI Model Selection - Automatic detection between Google Gemini 2.5 Flash (priority) and Claude AI

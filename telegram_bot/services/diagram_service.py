@@ -60,14 +60,19 @@ class DiagramService:
             if 'classDef' in line and (len(line.split(':')) < 2 or '#' not in line):
                 continue
                 
-            # Fix malformed classDef syntax
+            # Fix malformed classDef syntax but preserve good ones
             if line.strip().startswith('classDef'):
-                # Ensure proper format: classDef className fill:#color,stroke:#color,color:#color
-                parts = line.split()
-                if len(parts) >= 2:
-                    class_name = parts[1]
-                    # Simple classDef with safe colors
-                    line = f"    classDef {class_name} fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#000"
+                # If it already has proper format with fill: and stroke:, keep it
+                if 'fill:' in line and 'stroke:' in line and '#' in line:
+                    # This looks like a good classDef, keep it as is
+                    pass
+                else:
+                    # Fix malformed classDef
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        class_name = parts[1]
+                        # Use one of our safe color schemes
+                        line = f"    classDef {class_name} fill:#e1f5fe,stroke:#01579b,stroke-width:2px"
             
             fixed_lines.append(line)
         
@@ -89,11 +94,15 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY SIMPLE STYLING:
+7. APPLY COLORFUL STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
-   - Use different arrow styles: --> (solid), -.-> (dotted)
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
+   - Add these SAFE color classes at the end:
+     classDef primary fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+     classDef secondary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+     classDef accent fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+   - Apply classes to important nodes: NodeName:::primary
    - Keep labels short and meaningful
-   - Focus on clear structure and flow
 
 Analyze the transcript and determine what type of diagram would best represent the content. Common patterns:
 - If discussing system architecture → flowchart showing components and connections
@@ -118,11 +127,15 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY SIMPLE STYLING:
+7. APPLY COLORFUL STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
-   - Use different arrow styles: --> (solid), -.-> (dotted)
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
+   - Add these SAFE color classes at the end:
+     classDef primary fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+     classDef secondary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+     classDef accent fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+   - Apply classes to important nodes: NodeName:::primary
    - Keep labels short and meaningful
-   - Focus on clear structure and flow
 
 Transcript:
 {transcript}"""
@@ -192,8 +205,8 @@ Transcript:
                     "mmdc",
                     "-i", mmd_file_path,
                     "-o", output_path,
-                    "-t", "dark",  # Use dark theme
-                    "-b", "white",  # White background for better contrast
+                    "-t", "forest",  # Use forest theme (green/blue colors)
+                    "-b", "#f8f9fa",  # Light gray background
                     "--width", "1200",  # Larger width for better readability
                     "--height", "800",  # Larger height
                     "-s", "2"  # Scale factor for higher quality
@@ -226,8 +239,8 @@ Transcript:
                         "mmdc",
                         "-i", mmd_file_path,
                         "-o", output_path,
-                        "-t", "dark",
-                        "-b", "white",
+                        "-t", "forest",
+                        "-b", "#f8f9fa",
                         "--width", "1200",
                         "--height", "800"
                     ]

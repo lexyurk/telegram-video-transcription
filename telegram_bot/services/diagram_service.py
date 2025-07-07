@@ -187,7 +187,7 @@ Transcript:
             logger.error(f"Error generating mermaid code: {e}", exc_info=True)
             return None
 
-    def _get_puppeteer_config(self) -> str:
+    def _get_puppeteer_config(self) -> dict:
         """Get Puppeteer configuration for cloud/containerized environments."""
         # Default Puppeteer args for headless environments
         puppeteer_args = [
@@ -222,8 +222,7 @@ Transcript:
             config["executablePath"] = chrome_path
             logger.info(f"Using Chrome executable from environment: {chrome_path}")
         
-        import json
-        return json.dumps(config)
+        return config
 
     async def _convert_mermaid_to_image(self, mermaid_code: str) -> Optional[str]:
         """Convert mermaid code to image using mermaid-cli."""
@@ -237,10 +236,15 @@ Transcript:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = f"/tmp/diagram_{timestamp}.png"
 
+            # Create temporary puppeteer config file
+            puppeteer_config = self._get_puppeteer_config()
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as config_file:
+                import json
+                json.dump({"puppeteer": puppeteer_config}, config_file)
+                config_file_path = config_file.name
+
             try:
                 # Use mermaid-cli to convert to image with forest theme
-                # Add Puppeteer configuration for cloud/containerized environments
-                puppeteer_config = self._get_puppeteer_config()
                 logger.info(f"Using Puppeteer config: {puppeteer_config}")
                 
                 cmd = [
@@ -251,7 +255,7 @@ Transcript:
                     "-b", "#f8f9fa",  # Light gray background
                     "--width", "1200",  # Larger width for better readability
                     "--height", "800",  # Larger height
-                    "--puppeteerConfig", puppeteer_config
+                    "--configFile", config_file_path
                 ]
                 
                 process = await asyncio.create_subprocess_exec(
@@ -275,8 +279,8 @@ Transcript:
                     logger.error(f"Stdout: {stdout.decode()}")
                     logger.error(f"Stderr: {stderr.decode()}")
                     
-                    # Try alternative approach with simpler command
-                    logger.info("Trying alternative approach with simpler command...")
+                    # Try alternative approach with simpler command (no config file)
+                    logger.info("Trying alternative approach without config file...")
                     simple_cmd = [
                         "mmdc",
                         "-i", mmd_file_path,
@@ -284,8 +288,7 @@ Transcript:
                         "-t", "forest",
                         "-b", "#f8f9fa",
                         "--width", "1200",
-                        "--height", "800",
-                        "--puppeteerConfig", self._get_puppeteer_config()
+                        "--height", "800"
                     ]
                     
                     simple_process = await asyncio.create_subprocess_exec(
@@ -307,11 +310,12 @@ Transcript:
                     return None
                     
             finally:
-                # Clean up temporary mermaid file
+                # Clean up temporary files
                 try:
                     os.unlink(mmd_file_path)
+                    os.unlink(config_file_path)
                 except Exception as e:
-                    logger.warning(f"Failed to clean up temp file {mmd_file_path}: {e}")
+                    logger.warning(f"Failed to clean up temp files: {e}")
 
         except Exception as e:
             logger.error(f"Error converting mermaid to image: {e}", exc_info=True)

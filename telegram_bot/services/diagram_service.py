@@ -145,7 +145,7 @@ Transcript:
             output_path = f"/tmp/diagram_{timestamp}.png"
 
             try:
-                # Use mermaid-cli to convert to image
+                # Use mermaid-cli to convert to image with proper browser config
                 cmd = [
                     "mmdc",
                     "-i", mmd_file_path,
@@ -153,7 +153,8 @@ Transcript:
                     "-t", "dark",  # Use dark theme
                     "-b", "transparent",  # Transparent background
                     "--width", "1024",
-                    "--height", "768"
+                    "--height", "768",
+                    "--puppeteerConfig", '{"args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]}'
                 ]
                 
                 process = await asyncio.create_subprocess_exec(
@@ -164,12 +165,47 @@ Transcript:
                 
                 stdout, stderr = await process.communicate()
                 
+                logger.debug(f"mmdc command: {' '.join(cmd)}")
+                logger.debug(f"mmdc stdout: {stdout.decode()}")
+                logger.debug(f"mmdc stderr: {stderr.decode()}")
+                
                 if process.returncode == 0 and os.path.exists(output_path):
                     logger.info(f"Successfully converted mermaid to image: {output_path}")
                     return output_path
                 else:
                     logger.error(f"Failed to convert mermaid to image. Return code: {process.returncode}")
+                    logger.error(f"Command: {' '.join(cmd)}")
+                    logger.error(f"Stdout: {stdout.decode()}")
                     logger.error(f"Stderr: {stderr.decode()}")
+                    
+                    # Try alternative approach without puppeteerConfig
+                    logger.info("Trying alternative approach without puppeteerConfig...")
+                    simple_cmd = [
+                        "mmdc",
+                        "-i", mmd_file_path,
+                        "-o", output_path,
+                        "-t", "dark",
+                        "-b", "transparent",
+                        "--width", "1024",
+                        "--height", "768"
+                    ]
+                    
+                    simple_process = await asyncio.create_subprocess_exec(
+                        *simple_cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    
+                    simple_stdout, simple_stderr = await simple_process.communicate()
+                    
+                    if simple_process.returncode == 0 and os.path.exists(output_path):
+                        logger.info(f"Successfully converted mermaid to image with simple command: {output_path}")
+                        return output_path
+                    else:
+                        logger.error(f"Simple command also failed. Return code: {simple_process.returncode}")
+                        logger.error(f"Simple stdout: {simple_stdout.decode()}")
+                        logger.error(f"Simple stderr: {simple_stderr.decode()}")
+                    
                     return None
                     
             finally:

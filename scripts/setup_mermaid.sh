@@ -36,9 +36,14 @@ fi
 
 echo "✅ mermaid-cli installed: $(mmdc --version)"
 
-# Install Playwright browsers (needed for rendering)
-echo "🎭 Installing Playwright browsers..."
-npx playwright install chromium
+# Install Chrome headless shell for Puppeteer (needed for rendering)
+echo "🎭 Installing Chrome headless shell for Puppeteer..."
+npm install -g puppeteer
+npx puppeteer browsers install chrome-headless-shell
+
+# Configure Chrome properly
+echo "🔧 Configuring Chrome..."
+./scripts/setup_chrome.sh
 
 echo "✅ Setup complete! Testing installation..."
 

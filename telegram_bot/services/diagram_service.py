@@ -65,6 +65,17 @@ class DiagramService:
             if '#' in line and re.search(r'#[0-9A-Fa-f]{1,5}(?=\s|,|;|$)', line):
                 continue
             
+            # Fix problematic characters in node labels
+            # Replace parentheses in node labels with safer alternatives
+            line = re.sub(r'\[([^\]]*)\(([^)]*)\)([^\]]*)\]', r'[\1-\2-\3]', line)
+            
+            # Fix any remaining problematic characters that can cause parsing issues
+            # Replace other special chars in labels
+            line = re.sub(r'\[([^\]]*[;:,{}]+[^\]]*)\]', lambda m: f'[{re.sub(r"[;:,{}]+", "-", m.group(1))}]', line)
+            
+            # Remove semicolons at the end of lines that might cause issues
+            line = re.sub(r';\s*$', '', line)
+            
             fixed_lines.append(line)
         
         return '\n'.join(fixed_lines)
@@ -82,10 +93,12 @@ IMPORTANT RULES:
    - For conversations between people: use sequenceDiagram
    - For organizational structures: use graph or mindmap
    - For timelines: use timeline or gantt
-4. Keep node labels concise but meaningful (max 20 chars per label)
-5. Use proper mermaid syntax
-6. Make sure the diagram is complete and syntactically correct
-7. APPLY SIMPLE STYLING:
+4. Keep node labels concise but meaningful (max 15 chars per label)
+5. AVOID special characters in labels: no parentheses (), semicolons ;, colons :, commas ,
+6. Use only letters, numbers, spaces, and hyphens in node labels
+7. Use proper mermaid syntax
+8. Make sure the diagram is complete and syntactically correct
+9. APPLY SIMPLE STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
    - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)  
    - Keep labels short and meaningful
@@ -112,10 +125,12 @@ IMPORTANT RULES:
 1. Generate ONLY the mermaid diagram code - no explanations or markdown formatting
 2. Start directly with the diagram type (e.g., "flowchart TD", "graph TD", "sequenceDiagram", etc.)
 3. Follow the user's requirements about what should be included in the diagram
-4. Keep node labels concise but meaningful (max 20 chars per label)
-5. Use proper mermaid syntax
-6. Make sure the diagram is complete and syntactically correct
-7. APPLY SIMPLE STYLING:
+4. Keep node labels concise but meaningful (max 15 chars per label)
+5. AVOID special characters in labels: no parentheses (), semicolons ;, colons :, commas ,
+6. Use only letters, numbers, spaces, and hyphens in node labels
+7. Use proper mermaid syntax
+8. Make sure the diagram is complete and syntactically correct
+9. APPLY SIMPLE STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
    - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)  
    - Keep labels short and meaningful

@@ -1,6 +1,7 @@
 services:
   telegram-bot:
     build: .
+    platform: linux/amd64
     container_name: telegram-transcription-bot
     env_file:
       - .env

@@ -1,6 +1,7 @@
 """Services package for telegram bot."""
 
 from telegram_bot.services.ai_model import AIModel, GeminiModel, ClaudeModel, create_ai_model
+from telegram_bot.services.diagram_service import DiagramService
 from telegram_bot.services.file_service import FileService
 from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
 from telegram_bot.services.summarization_service import SummarizationService
@@ -11,6 +12,7 @@ __all__ = [
     "GeminiModel", 
     "ClaudeModel",
     "create_ai_model",
+    "DiagramService",
     "FileService", 
     "SpeakerIdentificationService",
     "SummarizationService",

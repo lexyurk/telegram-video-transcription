@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import tempfile
 from datetime import datetime
 
 from loguru import logger
@@ -20,6 +21,7 @@ from telegram_bot.services import (
     TranscriptionService, 
     SummarizationService,
     SpeakerIdentificationService,
+    DiagramService,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 
@@ -33,6 +35,7 @@ class TelegramTranscriptionBot:
         self.summarization_service = SummarizationService()
         self.speaker_identification_service = SpeakerIdentificationService()
         self.file_service = FileService()
+        self.diagram_service = DiagramService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -71,6 +74,12 @@ Welcome! I can transcribe your video and audio files and create summaries with a
 **Commands:**
 /start - Show this message
 /help - Show help
+/diagram - Create a diagram from a transcript (reply to a .txt file)
+
+**New Feature! 📊 Diagram Generation:**
+• Reply to any transcript file with `/diagram` to create a visual diagram
+• Use `/diagram <custom prompt>` to specify what the diagram should show
+• Examples: `/diagram show the decision flow`, `/diagram map relationships`
 
 Just send me a file and I'll handle the rest! 🚀
         """
@@ -83,6 +92,157 @@ Just send me a file and I'll handle the rest! 🚀
     ) -> None:
         """Handle the /help command."""
         await self.start_command(update, context)
+
+    async def diagram_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle the /diagram command."""
+        user_id = update.effective_user.id
+        
+        # Check if this is a reply to a message
+        if not update.message.reply_to_message:
+            await update.message.reply_text(
+                "📊 **Diagram Command Usage**\n\n"
+                "To create a diagram from a transcript:\n"
+                "1. Reply to a transcript file with `/diagram`\n"
+                "2. Or reply with `/diagram <custom prompt>`\n\n"
+                "**Examples:**\n"
+                "• `/diagram` - Creates a generic diagram\n"
+                "• `/diagram show the decision flow` - Creates a diagram focused on decisions\n"
+                "• `/diagram map the relationships between people` - Creates a relationship diagram\n\n"
+                "The diagram will be generated based on the transcript content! 🎨",
+                parse_mode="Markdown",
+            )
+            return
+
+        replied_message = update.message.reply_to_message
+        
+        # Check if the replied message has a document (transcript file)
+        if not replied_message.document:
+            await update.message.reply_text(
+                "❌ **Please reply to a transcript file**\n\n"
+                "The `/diagram` command works with transcript files (.txt) that I generated earlier.\n"
+                "Reply to a transcript file with `/diagram` to create a diagram!",
+                parse_mode="Markdown",
+            )
+            return
+        
+        # Check if it's a .txt file (transcript)
+        if not replied_message.document.file_name.endswith('.txt'):
+            await update.message.reply_text(
+                "❌ **Please reply to a transcript file**\n\n"
+                "The `/diagram` command works with transcript files (.txt) that I generated earlier.\n"
+                "Reply to a transcript file with `/diagram` to create a diagram!",
+                parse_mode="Markdown",
+            )
+            return
+        
+        # Extract custom prompt if provided
+        custom_prompt = None
+        if context.args:
+            custom_prompt = ' '.join(context.args)
+        
+        # Send processing message
+        processing_msg = await update.message.reply_text(
+            "📊 **Creating diagram from transcript...**\n\n"
+            "🔄 This will take a moment...",
+            parse_mode="Markdown",
+        )
+        
+        temp_files_to_cleanup = []
+        
+        try:
+            # Download the transcript file
+            transcript_file = await replied_message.document.get_file()
+            
+            # Create a temporary file to store the transcript
+            with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as temp_file:
+                temp_file_path = temp_file.name
+                
+            temp_files_to_cleanup.append(temp_file_path)
+            
+            # Download the transcript content
+            await transcript_file.download_to_drive(temp_file_path)
+            
+            # Read the transcript content
+            with open(temp_file_path, 'r', encoding='utf-8') as f:
+                transcript_content = f.read()
+            
+            if not transcript_content.strip():
+                await processing_msg.edit_text(
+                    "❌ **Empty transcript file**\n\n"
+                    "The transcript file appears to be empty. Please try with a different file.",
+                    parse_mode="Markdown",
+                )
+                return
+            
+            # Update processing message
+            prompt_text = f" with custom prompt: '{custom_prompt}'" if custom_prompt else ""
+            await processing_msg.edit_text(
+                f"📊 **Creating diagram from transcript{prompt_text}...**\n\n"
+                "🎨 Generating diagram...",
+                parse_mode="Markdown",
+            )
+            
+            # Generate diagram
+            diagram_path = await self.diagram_service.create_diagram_from_transcript(
+                transcript_content, custom_prompt
+            )
+            
+            if not diagram_path:
+                await processing_msg.edit_text(
+                    "❌ **Failed to generate diagram**\n\n"
+                    "Could not create a diagram from the transcript. This might be due to:\n"
+                    "• Complex transcript content\n"
+                    "• AI model limitations\n"
+                    "• Technical issues\n\n"
+                    "Please try again or use a different transcript.",
+                    parse_mode="Markdown",
+                )
+                return
+            
+            temp_files_to_cleanup.append(diagram_path)
+            
+            # Send the diagram
+            with open(diagram_path, 'rb') as diagram_file:
+                caption = "📊 **Diagram Generated!**\n\n"
+                if custom_prompt:
+                    caption += f"Based on: {custom_prompt}\n"
+                caption += f"From: {replied_message.document.file_name}"
+                
+                await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=diagram_file,
+                    caption=caption,
+                    parse_mode="Markdown",
+                )
+            
+            # Update processing message with success
+            await processing_msg.edit_text(
+                "✅ **Diagram created successfully!**\n\n"
+                "📊 Check the diagram above!",
+                parse_mode="Markdown",
+            )
+            
+            logger.info(f"Successfully created diagram for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error creating diagram for user {user_id}: {e}", exc_info=True)
+            await processing_msg.edit_text(
+                f"❌ **Error creating diagram**\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Please try again with a different transcript.",
+                parse_mode="Markdown",
+            )
+        finally:
+            # Cleanup all temporary files
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                        logger.debug(f"Cleaned up temp file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
 
     async def handle_file(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -470,6 +630,7 @@ Just send me a file and I'll handle the rest! 🚀
         # Command handlers
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
+        application.add_handler(CommandHandler("diagram", self.diagram_command))
 
         # File handlers (documents, audio, video, voice, video notes)
         application.add_handler(MessageHandler(filters.Document.ALL, self.handle_file))

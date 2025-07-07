@@ -51,34 +51,19 @@ class DiagramService:
         lines = mermaid_code.split('\n')
         fixed_lines = []
         
-        # Define safe color mappings
-        safe_colors = {
-            'primary': 'fill:#e1f5fe,stroke:#01579b,stroke-width:2px',
-            'secondary': 'fill:#f3e5f5,stroke:#4a148c,stroke-width:2px', 
-            'accent': 'fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px',
-            'default': 'fill:#fff3e0,stroke:#e65100,stroke-width:2px'
-        }
-        
         for line in lines:
-            # Check if this is a classDef line
+            # Remove any classDef lines entirely - they cause too many parsing issues
             if line.strip().startswith('classDef'):
-                parts = line.split()
-                if len(parts) >= 2:
-                    class_name = parts[1]
-                    # Replace with safe color definition
-                    if class_name in safe_colors:
-                        line = f"    classDef {class_name} {safe_colors[class_name]}"
-                    else:
-                        # Use default colors for any unknown class
-                        line = f"    classDef {class_name} {safe_colors['default']}"
+                continue
             
-            # Remove any obviously broken lines with incomplete hex colors
+            # Remove any lines with class applications that might reference removed classDef
+            if ':::' in line:
+                # Remove the class application but keep the node
+                line = re.sub(r':::[\w]+', '', line)
+            
+            # Remove any lines with incomplete hex colors or other problematic syntax
             if '#' in line and re.search(r'#[0-9A-Fa-f]{1,5}(?=\s|,|;|$)', line):
-                # Check if it's an incomplete hex color (less than 6 digits)
-                incomplete_hex = re.search(r'#([0-9A-Fa-f]{1,5})(?=\s|,|;|$)', line)
-                if incomplete_hex and len(incomplete_hex.group(1)) < 6:
-                    # Skip this line entirely if it has incomplete hex colors
-                    continue
+                continue
             
             fixed_lines.append(line)
         
@@ -100,15 +85,12 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY COLORFUL STYLING:
+7. APPLY SIMPLE STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
-   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
-   - Add these SAFE color classes at the end:
-     classDef primary fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-     classDef secondary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-     classDef accent fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-   - Apply classes to important nodes: NodeName:::primary
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)  
    - Keep labels short and meaningful
+   - Focus on clear structure and readability
+   - DO NOT use classDef or color definitions - let the theme handle colors
 
 Analyze the transcript and determine what type of diagram would best represent the content. Common patterns:
 - If discussing system architecture → flowchart showing components and connections
@@ -133,15 +115,12 @@ IMPORTANT RULES:
 4. Keep node labels concise but meaningful (max 20 chars per label)
 5. Use proper mermaid syntax
 6. Make sure the diagram is complete and syntactically correct
-7. APPLY COLORFUL STYLING:
+7. APPLY SIMPLE STYLING:
    - Use different node shapes: rectangles [], rounded (), diamonds {{}}
-   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)
-   - Add these SAFE color classes at the end:
-     classDef primary fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-     classDef secondary fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-     classDef accent fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-   - Apply classes to important nodes: NodeName:::primary
+   - Use different arrow styles: --> (solid), -.-> (dotted), ===> (thick)  
    - Keep labels short and meaningful
+   - Focus on clear structure and readability
+   - DO NOT use classDef or color definitions - let the theme handle colors
 
 Transcript:
 {transcript}"""
@@ -206,7 +185,7 @@ Transcript:
             output_path = f"/tmp/diagram_{timestamp}.png"
 
             try:
-                # Use mermaid-cli to convert to image with better styling
+                # Use mermaid-cli to convert to image with forest theme
                 cmd = [
                     "mmdc",
                     "-i", mmd_file_path,
@@ -214,8 +193,7 @@ Transcript:
                     "-t", "forest",  # Use forest theme (green/blue colors)
                     "-b", "#f8f9fa",  # Light gray background
                     "--width", "1200",  # Larger width for better readability
-                    "--height", "800",  # Larger height
-                    "-s", "2"  # Scale factor for higher quality
+                    "--height", "800"  # Larger height
                 ]
                 
                 process = await asyncio.create_subprocess_exec(

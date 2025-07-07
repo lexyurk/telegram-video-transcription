@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import subprocess
 import tempfile
 from datetime import datetime
 from typing import Optional
@@ -19,6 +20,73 @@ class DiagramService:
         from telegram_bot.services.ai_model import create_ai_model
         
         self.ai_model = ai_model or create_ai_model()
+        
+        # Run Chrome diagnostics on initialization
+        self._run_chrome_diagnostics()
+
+    def _run_chrome_diagnostics(self) -> None:
+        """Run Chrome diagnostics to check installation and provide helpful error messages."""
+        try:
+            chrome_paths = [
+                os.environ.get('CHROME_BIN'),
+                os.environ.get('PUPPETEER_EXECUTABLE_PATH'),
+                '/usr/local/bin/chrome-headless-shell',
+                '/opt/puppeteer-cache/chrome-headless-shell/linux-*/chrome-headless-shell',
+                '/usr/bin/google-chrome',
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chrome'
+            ]
+            
+            found_chrome = None
+            for chrome_path in chrome_paths:
+                if chrome_path and os.path.exists(chrome_path) and os.access(chrome_path, os.X_OK):
+                    found_chrome = chrome_path
+                    break
+                elif chrome_path and '*' in chrome_path:
+                    # Handle wildcard paths
+                    import glob
+                    matches = glob.glob(chrome_path)
+                    for match in matches:
+                        if os.path.exists(match) and os.access(match, os.X_OK):
+                            found_chrome = match
+                            break
+                    if found_chrome:
+                        break
+            
+            if found_chrome:
+                logger.info(f"✅ Chrome found at: {found_chrome}")
+                
+                # Test Chrome version
+                try:
+                    result = subprocess.run([found_chrome, '--version'], 
+                                         capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        logger.info(f"✅ Chrome version: {result.stdout.strip()}")
+                    else:
+                        logger.warning(f"⚠️ Chrome version check failed: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Chrome version check error: {e}")
+                    
+                # Test basic Chrome functionality
+                try:
+                    test_args = [found_chrome, '--headless=new', '--no-sandbox', '--disable-gpu', '--version']
+                    result = subprocess.run(test_args, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        logger.info("✅ Chrome basic functionality test passed")
+                    else:
+                        logger.warning(f"⚠️ Chrome basic test failed: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Chrome basic test error: {e}")
+                    
+            else:
+                logger.error("❌ Chrome not found in any expected location")
+                logger.error("Available paths checked:")
+                for path in chrome_paths:
+                    if path:
+                        logger.error(f"  - {path} (exists: {os.path.exists(path) if path else False})")
+                
+        except Exception as e:
+            logger.warning(f"Chrome diagnostics failed: {e}")
 
     def _remove_speaker_labels(self, text: str) -> str:
         """
@@ -189,7 +257,7 @@ Transcript:
 
     def _get_puppeteer_config(self) -> dict:
         """Get Puppeteer configuration for cloud/containerized environments."""
-        # Default Puppeteer args for headless environments
+        # Enhanced Puppeteer args for headless environments and containers
         puppeteer_args = [
             "--no-sandbox",
             "--disable-setuid-sandbox",
@@ -206,7 +274,56 @@ Transcript:
             "--disable-renderer-backgrounding",
             "--disable-features=TranslateUI",
             "--disable-ipc-flooding-protection",
-            "--headless=new"
+            "--headless=new",
+            "--disable-web-security",
+            "--disable-features=VizDisplayCompositor",
+            "--disable-logging",
+            "--disable-permissions-api",
+            "--disable-background-networking",
+            "--disable-sync",
+            "--disable-translate",
+            "--hide-scrollbars",
+            "--mute-audio",
+            "--no-default-browser-check",
+            "--no-pings",
+            "--disable-default-apps",
+            "--disable-bundled-ppapi-flash",
+            "--disable-plugins-discovery",
+            "--disable-preconnect",
+            "--disable-hang-monitor",
+            "--disable-client-side-phishing-detection",
+            "--disable-popup-blocking",
+            "--disable-prompt-on-repost",
+            "--disable-domain-reliability",
+            "--disable-component-update",
+            "--disable-background-downloads",
+            "--disable-add-to-shelf",
+            "--disable-datasaver-prompt",
+            "--disable-device-discovery-notifications",
+            "--disable-infobars",
+            "--disable-notifications",
+            "--disable-desktop-notifications",
+            "--disable-save-password-bubble",
+            "--disable-session-crashed-bubble",
+            "--disable-speech-api",
+            "--disable-tab-for-desktop-share",
+            "--disable-voice-input",
+            "--disable-wake-on-wifi",
+            "--disable-printing",
+            "--disable-crash-reporter",
+            "--disable-breakpad",
+            "--disable-check-for-update-interval",
+            "--disable-cloud-import",
+            "--disable-contextual-search",
+            "--disable-dinosaur-easter-egg",
+            "--disable-new-zip-unpacker",
+            "--disable-search-engine-choice-screen",
+            "--disable-features=OutOfBlinkCors,SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure",
+            "--use-mock-keychain",
+            "--force-color-profile=srgb",
+            "--memory-pressure-off",
+            "--max_old_space_size=4096",
+            "--js-flags=--expose-gc --max-old-space-size=4096"
         ]
         
         # Check for Chrome executable path from environment
@@ -215,7 +332,21 @@ Transcript:
         config = {
             "args": puppeteer_args,
             "headless": "new",
-            "defaultViewport": {"width": 1200, "height": 800}
+            "defaultViewport": {
+                "width": 1920,  # Full HD resolution
+                "height": 1080,
+                "deviceScaleFactor": 2  # High-DPI rendering
+            },
+            "ignoreHTTPSErrors": True,
+            "ignoreDefaultArgs": ["--disable-extensions"],
+            "pipe": True,
+            "timeout": 30000,
+            "protocolTimeout": 30000,
+            "handleSIGINT": False,
+            "handleSIGTERM": False,
+            "handleSIGHUP": False,
+            "devtools": False,
+            "slowMo": 0
         }
         
         if chrome_path:
@@ -244,8 +375,18 @@ Transcript:
                 config_file_path = config_file.name
 
             try:
+                # Set environment variables that mermaid-cli will respect
+                env = os.environ.copy()
+                env.update({
+                    'PUPPETEER_ARGS': '--no-sandbox,--disable-setuid-sandbox,--disable-dev-shm-usage,--disable-gpu,--disable-extensions,--no-first-run,--no-zygote,--single-process,--headless=new',
+                    'PUPPETEER_EXECUTABLE_PATH': puppeteer_config.get('executablePath', '/usr/local/bin/chrome-headless-shell'),
+                    'CHROME_BIN': puppeteer_config.get('executablePath', '/usr/local/bin/chrome-headless-shell'),
+                    'MERMAID_CHROMIUM_ARGS': '--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --disable-extensions --no-first-run --no-zygote --single-process --headless=new'
+                })
+                
                 # Use mermaid-cli to convert to image with forest theme
                 logger.info(f"Using Puppeteer config: {puppeteer_config}")
+                logger.info(f"Using Chrome path: {env.get('PUPPETEER_EXECUTABLE_PATH')}")
                 
                 cmd = [
                     "mmdc",
@@ -253,15 +394,17 @@ Transcript:
                     "-o", output_path,
                     "-t", "forest",  # Use forest theme (green/blue colors)
                     "-b", "#f8f9fa",  # Light gray background
-                    "--width", "1200",  # Larger width for better readability
-                    "--height", "800",  # Larger height
+                    "--width", "1920",  # Full HD width
+                    "--height", "1080",  # Full HD height
+                    "--scale", "2",  # 2x scale for crisp rendering
                     "--configFile", config_file_path
                 ]
                 
                 process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env
                 )
                 
                 stdout, stderr = await process.communicate()
@@ -287,14 +430,16 @@ Transcript:
                         "-o", output_path,
                         "-t", "forest",
                         "-b", "#f8f9fa",
-                        "--width", "1200",
-                        "--height", "800"
+                        "--width", "1920",
+                        "--height", "1080",
+                        "--scale", "2"
                     ]
                     
                     simple_process = await asyncio.create_subprocess_exec(
                         *simple_cmd,
                         stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env
                     )
                     
                     simple_stdout, simple_stderr = await simple_process.communicate()
@@ -306,6 +451,66 @@ Transcript:
                         logger.error(f"Simple command also failed. Return code: {simple_process.returncode}")
                         logger.error(f"Simple stdout: {simple_stdout.decode()}")
                         logger.error(f"Simple stderr: {simple_stderr.decode()}")
+                        
+                        # Try high-quality SVG first, then convert to PNG
+                        logger.info("Trying high-quality SVG approach...")
+                        svg_output_path = output_path.replace('.png', '.svg')
+                        svg_cmd = [
+                            "mmdc",
+                            "-i", mmd_file_path,
+                            "-o", svg_output_path,
+                            "-t", "forest",
+                            "-b", "#f8f9fa"
+                        ]
+                        
+                        svg_process = await asyncio.create_subprocess_exec(
+                            *svg_cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                            env=env
+                        )
+                        
+                        svg_stdout, svg_stderr = await svg_process.communicate()
+                        
+                        if svg_process.returncode == 0 and os.path.exists(svg_output_path):
+                            logger.info(f"Successfully created SVG: {svg_output_path}")
+                            # Convert SVG to high-quality PNG using Chrome
+                            png_result = await self._convert_svg_to_png(svg_output_path, output_path)
+                            if png_result:
+                                # Clean up SVG file
+                                try:
+                                    os.unlink(svg_output_path)
+                                except:
+                                    pass
+                                return output_path
+                        
+                        # Try the most basic approach - no theme, no config
+                        logger.info("Trying most basic approach with minimal arguments...")
+                        basic_cmd = [
+                            "mmdc",
+                            "-i", mmd_file_path,
+                            "-o", output_path,
+                                                         "--width", "1920",
+                             "--height", "1080",
+                            "--scale", "2"
+                        ]
+                        
+                        basic_process = await asyncio.create_subprocess_exec(
+                            *basic_cmd,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                            env=env
+                        )
+                        
+                        basic_stdout, basic_stderr = await basic_process.communicate()
+                        
+                        if basic_process.returncode == 0 and os.path.exists(output_path):
+                            logger.info(f"Successfully converted mermaid to image with basic command: {output_path}")
+                            return output_path
+                        else:
+                            logger.error(f"Basic command also failed. Return code: {basic_process.returncode}")
+                            logger.error(f"Basic stdout: {basic_stdout.decode()}")
+                            logger.error(f"Basic stderr: {basic_stderr.decode()}")
                     
                     return None
                     
@@ -319,6 +524,220 @@ Transcript:
 
         except Exception as e:
             logger.error(f"Error converting mermaid to image: {e}", exc_info=True)
+            return None
+    
+    async def _convert_svg_to_png(self, svg_path: str, output_path: str) -> bool:
+        """Convert SVG to high-quality PNG using Chrome."""
+        try:
+            # Get Chrome path
+            chrome_path = os.environ.get('CHROME_BIN') or os.environ.get('PUPPETEER_EXECUTABLE_PATH') or '/usr/local/bin/chrome-headless-shell'
+            
+            # Set environment variables for Chrome
+            env = os.environ.copy()
+            env.update({
+                'DISPLAY': ':99',
+                'CHROME_BIN': chrome_path,
+                'PUPPETEER_EXECUTABLE_PATH': chrome_path
+            })
+            
+            # Chrome command for SVG to PNG conversion
+            chrome_args = [
+                chrome_path,
+                '--headless=new',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-extensions',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-web-security',
+                '--window-size=1920,1080',
+                '--force-device-scale-factor=2',
+                '--screenshot',
+                f'--screenshot={output_path}',
+                f'file://{svg_path}'
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *chrome_args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0 and os.path.exists(output_path):
+                logger.info(f"Successfully converted SVG to PNG: {output_path}")
+                return True
+            else:
+                logger.error(f"SVG to PNG conversion failed. Return code: {process.returncode}")
+                logger.error(f"SVG conversion stderr: {stderr.decode()}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error converting SVG to PNG: {e}", exc_info=True)
+            return False
+    
+    async def _convert_mermaid_direct_chrome(self, mermaid_code: str) -> Optional[str]:
+        """Direct Chrome approach as last resort."""
+        try:
+            import json
+            import base64
+            
+            # Create output image path
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = f"/tmp/diagram_{timestamp}.png"
+            
+            # Create a simple HTML page with mermaid
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                                 <style>
+                     body {{
+                         margin: 0;
+                         padding: 40px;
+                         font-family: Arial, sans-serif;
+                         background-color: #f8f9fa;
+                         min-width: 1920px;
+                         min-height: 1080px;
+                     }}
+                     .mermaid {{
+                         text-align: center;
+                         font-size: 16px;
+                         line-height: 1.5;
+                     }}
+                 </style>
+            </head>
+            <body>
+                <div class="mermaid">
+                    {mermaid_code}
+                </div>
+                                 <script>
+                     mermaid.initialize({{ 
+                         startOnLoad: true,
+                         theme: 'forest',
+                         themeVariables: {{
+                             primaryColor: '#4CAF50',
+                             primaryTextColor: '#ffffff',
+                             primaryBorderColor: '#45a049',
+                             lineColor: '#2E7D32',
+                             secondaryColor: '#81C784',
+                             tertiaryColor: '#C8E6C9'
+                         }},
+                         flowchart: {{
+                             useMaxWidth: false,
+                             htmlLabels: true,
+                             curve: 'basis'
+                         }},
+                         sequence: {{
+                             useMaxWidth: false,
+                             wrap: true
+                         }},
+                         gantt: {{
+                             useMaxWidth: false
+                         }},
+                         journey: {{
+                             useMaxWidth: false
+                         }},
+                         fontFamily: 'Arial, sans-serif',
+                         fontSize: '16px',
+                         scale: 2
+                     }});
+                 </script>
+            </body>
+            </html>
+            """
+            
+            # Create temporary HTML file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as html_file:
+                html_file.write(html_content)
+                html_file_path = html_file.name
+            
+            try:
+                # Get Chrome path
+                chrome_path = os.environ.get('CHROME_BIN') or os.environ.get('PUPPETEER_EXECUTABLE_PATH') or '/usr/local/bin/chrome-headless-shell'
+                
+                # Set environment variables for Chrome
+                env = os.environ.copy()
+                env.update({
+                    'DISPLAY': ':99',
+                    'CHROME_BIN': chrome_path,
+                    'PUPPETEER_EXECUTABLE_PATH': chrome_path
+                })
+                
+                # Direct Chrome command
+                chrome_args = [
+                    chrome_path,
+                    '--headless=new',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-extensions',
+                    '--no-first-run',
+                    '--no-zygote',
+                    '--single-process',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor',
+                    '--virtual-time-budget=10000',
+                    '--run-all-compositor-stages-before-draw',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-features=TranslateUI',
+                    '--disable-ipc-flooding-protection',
+                    '--force-color-profile=srgb',
+                    '--disable-background-networking',
+                    '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-translate',
+                    '--hide-scrollbars',
+                    '--mute-audio',
+                    '--no-default-browser-check',
+                    '--no-pings',
+                    '--disable-logging',
+                    '--disable-permissions-api',
+                    '--window-size=1920,1080',
+                    '--force-device-scale-factor=2',
+                    '--screenshot',
+                    f'--screenshot={output_path}',
+                    f'file://{html_file_path}'
+                ]
+                
+                logger.info(f"Attempting direct Chrome approach with path: {chrome_path}")
+                
+                process = await asyncio.create_subprocess_exec(
+                    *chrome_args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=env
+                )
+                
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode == 0 and os.path.exists(output_path):
+                    logger.info(f"Successfully created diagram with direct Chrome approach: {output_path}")
+                    return output_path
+                else:
+                    logger.error(f"Direct Chrome approach failed. Return code: {process.returncode}")
+                    logger.error(f"Chrome stdout: {stdout.decode()}")
+                    logger.error(f"Chrome stderr: {stderr.decode()}")
+                    return None
+                    
+            finally:
+                # Clean up temporary HTML file
+                try:
+                    os.unlink(html_file_path)
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temp HTML file: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error in direct Chrome approach: {e}", exc_info=True)
             return None
 
     def _create_simple_diagram_prompt(self, transcript: str, custom_prompt: Optional[str] = None) -> str:
@@ -397,7 +816,15 @@ IMPORTANT RULES:
                     logger.info("Simple diagram generated successfully as fallback")
                     return simple_image_path
             
-            logger.error("Both styled and simple diagram generation failed")
+            # Final fallback: try direct Chrome approach
+            logger.info("All mermaid-cli approaches failed, trying direct Chrome approach...")
+            direct_chrome_path = await self._convert_mermaid_direct_chrome(simple_mermaid_code or mermaid_code)
+            
+            if direct_chrome_path:
+                logger.info("Direct Chrome approach succeeded as final fallback")
+                return direct_chrome_path
+            
+            logger.error("All diagram generation methods failed (mermaid-cli and direct Chrome)")
             return None
 
         except Exception as e:

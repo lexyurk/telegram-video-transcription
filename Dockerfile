@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM --platform=linux/amd64 python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -42,11 +42,17 @@ RUN npm install -g @mermaid-js/mermaid-cli
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
 ENV PUPPETEER_CACHE_DIR=/opt/puppeteer-cache
 
-# Install Chromium browser (more compatible across architectures)
-RUN apt-get update && apt-get install -y chromium-browser && rm -rf /var/lib/apt/lists/*
+# Install Puppeteer globally and Chrome browser (x86-64)
+RUN npm install -g puppeteer
+RUN mkdir -p /opt/puppeteer-cache
+RUN npx puppeteer browsers install chrome-headless-shell
 
-# Create symbolic link for mermaid-cli
-RUN ln -sf /usr/bin/chromium-browser /usr/local/bin/chrome-headless-shell
+# Find and set Chrome executable path
+RUN CHROME_PATH=$(find /opt/puppeteer-cache -name "chrome-headless-shell" -type f -executable | head -1) && \
+    echo "Found Chrome at: $CHROME_PATH" && \
+    ln -sf "$CHROME_PATH" /usr/local/bin/chrome-headless-shell && \
+    echo "export PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> /etc/environment && \
+    echo "export CHROME_BIN=$CHROME_PATH" >> /etc/environment
 
 # Install uv
 RUN pip install uv

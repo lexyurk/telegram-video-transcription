@@ -5,7 +5,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 ## Features
 
 - 🎥 **Video & Audio Transcription**: Supports multiple formats (MP4, AVI, MOV, MP3, WAV, etc.)
-- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and AI models for summaries (Gemini 2.5 Flash by default, Claude support available)
+- 🤖 **AI-Powered**: Uses Deepgram Nova-3 for transcription and AI models for summaries (Gemini 2.5 Flash by default, Claude support available)
 - 📊 **NEW: Diagram Generation**: Creates visual diagrams from transcripts using Mermaid (flowcharts, sequence diagrams, etc.)
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations

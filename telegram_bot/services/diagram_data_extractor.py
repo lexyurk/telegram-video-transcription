@@ -17,18 +17,25 @@ class DiagramDataExtractor:
 
     async def analyze_transcript_for_diagram_type(self, transcript: str) -> str:
         """Analyze transcript and determine the best diagram type."""
-        prompt = f"""Analyze the following transcript and determine what type of diagram would best represent the content.
+        prompt = f"""Analyze the following meeting transcript and determine what type of diagram would best represent the content.
 
-Choose from these diagram types:
-- flowchart: For processes, workflows, decision trees, step-by-step procedures
-- relationship: For connections between people, entities, concepts, or organizations
-- timeline: For chronological events, sequences, or historical progression
-- hierarchy: For organizational structures, command chains, categorizations
-- chart: For data comparisons, statistics, or quantitative information
+Choose from these diagram types based on the meeting content:
+- flowchart: For processes, workflows, decision trees, step-by-step procedures, or problem-solving discussions
+- relationship: For connections between people, teams, concepts, stakeholders, or organizational interactions
+- timeline: For chronological events, project phases, milestones, or sequential discussion points
+- hierarchy: For organizational structures, reporting relationships, or categorized topics
+- chart: For data comparisons, statistics, metrics, or quantitative information discussed
 
-Return ONLY the diagram type (one word).
+Consider what would be most valuable for someone reviewing this meeting:
+- Are there clear processes or workflows discussed?
+- Are there relationships between people, teams, or concepts that need visualization?
+- Is there a timeline of events or project phases?
+- Are there hierarchical structures or categorizations?
+- Is there quantitative data that could be visualized?
 
-Transcript:
+Return ONLY the diagram type (one word in English: flowchart, relationship, timeline, hierarchy, or chart).
+
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -49,14 +56,29 @@ Transcript:
             return 'flowchart'  # Default fallback
 
     async def extract_flowchart_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[List[Dict], List[Tuple]]:
-        """Extract nodes and edges for a flowchart."""
-        base_prompt = """Analyze the following transcript and extract a flowchart structure.
+        """Extract nodes and edges for a flowchart focused on meeting content."""
+        base_prompt = """Analyze the following meeting transcript and extract a flowchart structure that represents the key discussion flow, decision points, and action items.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
+
+Focus on creating a meaningful flowchart that shows:
+- Main discussion topics as process nodes
+- Decision points and their outcomes
+- Action items and next steps
+- Key milestones or checkpoints mentioned
+- Problem-solving steps discussed
 
 Return a JSON object with two arrays:
-1. "nodes": Array of objects with {"id": "unique_id", "label": "short_label", "type": "start|process|decision|end"}
+1. "nodes": Array of objects with {"id": "unique_id", "label": "descriptive_label", "type": "start|process|decision|action|end"}
 2. "edges": Array of arrays like ["from_id", "to_id", "optional_label"]
 
-Keep labels short (max 15 characters). Create a logical flow showing the main process or decision points.
+Guidelines:
+- Use descriptive labels (up to 40 characters) that capture the essence of each step
+- Include decision points with yes/no or multiple choice outcomes
+- Show action items as distinct nodes
+- Connect related discussion points logically
+- Start with the main meeting topic and end with outcomes/next steps
+- ALL LABELS AND TEXT MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -64,22 +86,29 @@ Keep labels short (max 15 characters). Create a logical flow showing the main pr
             base_prompt += f"\nCustom requirements: {custom_prompt}\n"
         
         base_prompt += f"""
-Example format:
+Example format (labels will be in the transcript's language):
 {{
   "nodes": [
-    {{"id": "start", "label": "Begin", "type": "start"}},
-    {{"id": "process1", "label": "Check Input", "type": "process"}},
-    {{"id": "decision1", "label": "Valid?", "type": "decision"}},
-    {{"id": "end", "label": "Done", "type": "end"}}
+    {{"id": "start", "label": "Meeting: Project Status Review", "type": "start"}},
+    {{"id": "status", "label": "Current Status Discussion", "type": "process"}},
+    {{"id": "issues", "label": "Are there blockers?", "type": "decision"}},
+    {{"id": "resolve", "label": "Plan Resolution Strategy", "type": "process"}},
+    {{"id": "action1", "label": "Action: Update timeline", "type": "action"}},
+    {{"id": "next", "label": "Schedule follow-up", "type": "action"}},
+    {{"id": "end", "label": "Meeting concluded", "type": "end"}}
   ],
   "edges": [
-    ["start", "process1"],
-    ["process1", "decision1"],
-    ["decision1", "end", "Yes"]
+    ["start", "status"],
+    ["status", "issues"],
+    ["issues", "resolve", "Yes"],
+    ["issues", "next", "No"],
+    ["resolve", "action1"],
+    ["action1", "next"],
+    ["next", "end"]
   ]
 }}
 
-Transcript:
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -112,20 +141,37 @@ Transcript:
             logger.error(f"Error extracting flowchart data: {e}")
             # Return simple fallback structure
             return [
-                {"id": "start", "label": "Start", "type": "start"},
-                {"id": "main", "label": "Main Process", "type": "process"},
-                {"id": "end", "label": "End", "type": "end"}
-            ], [("start", "main"), ("main", "end")]
+                {"id": "start", "label": "Meeting Start", "type": "start"},
+                {"id": "main", "label": "Main Discussion", "type": "process"},
+                {"id": "action", "label": "Action Items Identified", "type": "action"},
+                {"id": "end", "label": "Meeting End", "type": "end"}
+            ], [("start", "main"), ("main", "action"), ("action", "end")]
 
     async def extract_relationship_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[List[str], List[Tuple]]:
-        """Extract entities and relationships."""
-        base_prompt = """Analyze the following transcript and extract relationships between entities (people, organizations, concepts, etc.).
+        """Extract entities and relationships from meeting content."""
+        base_prompt = """Analyze the following meeting transcript and extract relationships between people, teams, concepts, projects, or systems discussed.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
+
+Focus on identifying:
+- People mentioned and their roles/interactions
+- Teams or departments and their collaborations
+- Projects or initiatives and their dependencies
+- Systems or processes and their connections
+- Concepts or topics and their relationships
 
 Return a JSON object with two arrays:
-1. "entities": Array of entity names (people, organizations, concepts)
-2. "relationships": Array of arrays like ["entity1", "entity2", weight] where weight is 1-5 (strength of relationship)
+1. "entities": Array of entity names (people, teams, projects, concepts, systems)
+2. "relationships": Array of arrays like ["entity1", "entity2", weight, "relationship_type"] where:
+   - weight is 1-5 (strength of relationship: 1=weak mention, 5=strong dependency)
+   - relationship_type describes the connection (e.g., "collaborates with", "depends on", "reports to", "discussed together")
 
-Keep entity names short and clear.
+Guidelines:
+- Use clear, descriptive entity names
+- Include both people and non-people entities
+- Show both direct and indirect relationships
+- Prioritize relationships that are important for understanding the meeting outcomes
+- ALL ENTITY NAMES AND RELATIONSHIP TYPES MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -133,17 +179,19 @@ Keep entity names short and clear.
             base_prompt += f"\nCustom requirements: {custom_prompt}\n"
         
         base_prompt += f"""
-Example format:
+Example format (names will be in the transcript's language):
 {{
-  "entities": ["Alice", "Bob", "Company A", "Project X"],
+  "entities": ["Alice (PM)", "Bob (Dev)", "Marketing Team", "Project Alpha", "Database Migration", "Q4 Goals"],
   "relationships": [
-    ["Alice", "Bob", 3],
-    ["Alice", "Company A", 5],
-    ["Bob", "Project X", 2]
+    ["Alice (PM)", "Bob (Dev)", 4, "collaborates with"],
+    ["Alice (PM)", "Project Alpha", 5, "manages"],
+    ["Bob (Dev)", "Database Migration", 3, "responsible for"],
+    ["Project Alpha", "Q4 Goals", 4, "contributes to"],
+    ["Marketing Team", "Project Alpha", 2, "stakeholder in"]
   ]
 }}
 
-Transcript:
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -175,15 +223,33 @@ Transcript:
         except Exception as e:
             logger.error(f"Error extracting relationship data: {e}")
             # Return simple fallback
-            return ["Entity A", "Entity B"], [("Entity A", "Entity B", 1)]
+            return ["Participant A", "Participant B", "Main Topic"], [("Participant A", "Participant B", 3, "discussed with"), ("Participant A", "Main Topic", 4, "presented")]
 
     async def extract_timeline_data(self, transcript: str, custom_prompt: Optional[str] = None) -> List[Dict]:
-        """Extract timeline events."""
-        base_prompt = """Analyze the following transcript and extract chronological events for a timeline.
+        """Extract timeline events from meeting content."""
+        base_prompt = """Analyze the following meeting transcript and extract chronological events, milestones, or sequential discussion points for a timeline.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
+
+Focus on identifying:
+- Key milestones or deadlines mentioned
+- Sequential steps in processes discussed
+- Historical events or context referenced
+- Future planned activities with dates
+- Flow of discussion topics during the meeting
 
 Return a JSON object with an "events" array containing objects with:
-- "label": Short description of the event (max 20 characters)
+- "label": Clear description of the event (up to 50 characters)
 - "order": Number indicating sequence (1, 2, 3, etc.)
+- "type": Event type ("milestone", "deadline", "discussion", "decision", "action")
+- "timeframe": Time reference if mentioned ("Q1", "next week", "completed", etc.)
+
+Guidelines:
+- Include both past and future events
+- Show the progression of ideas or project phases
+- Capture important decisions in chronological order
+- Include action items with their timing
+- ALL EVENT LABELS AND TIMEFRAMES MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -191,16 +257,18 @@ Return a JSON object with an "events" array containing objects with:
             base_prompt += f"\nCustom requirements: {custom_prompt}\n"
         
         base_prompt += f"""
-Example format:
+Example format (labels will be in the transcript's language):
 {{
   "events": [
-    {{"label": "Project Start", "order": 1}},
-    {{"label": "First Review", "order": 2}},
-    {{"label": "Launch", "order": 3}}
+    {{"label": "Project kickoff completed", "order": 1, "type": "milestone", "timeframe": "last month"}},
+    {{"label": "Requirements gathering discussed", "order": 2, "type": "discussion", "timeframe": "today"}},
+    {{"label": "Design phase decision made", "order": 3, "type": "decision", "timeframe": "today"}},
+    {{"label": "Prototype deadline set", "order": 4, "type": "deadline", "timeframe": "next Friday"}},
+    {{"label": "Team review scheduled", "order": 5, "type": "action", "timeframe": "following week"}}
   ]
 }}
 
-Transcript:
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -226,18 +294,35 @@ Transcript:
             logger.error(f"Error extracting timeline data: {e}")
             # Return simple fallback
             return [
-                {"label": "Start", "order": 1},
-                {"label": "Middle", "order": 2},
-                {"label": "End", "order": 3}
+                {"label": "Meeting started", "order": 1, "type": "discussion", "timeframe": "today"},
+                {"label": "Main topics discussed", "order": 2, "type": "discussion", "timeframe": "today"},
+                {"label": "Action items identified", "order": 3, "type": "action", "timeframe": "today"},
+                {"label": "Next steps planned", "order": 4, "type": "action", "timeframe": "upcoming"}
             ]
 
     async def extract_hierarchy_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Dict:
-        """Extract hierarchical structure."""
-        base_prompt = """Analyze the following transcript and extract a hierarchical structure (organizational chart, categorization, etc.).
+        """Extract hierarchical structure from meeting content."""
+        base_prompt = """Analyze the following meeting transcript and extract a hierarchical structure that represents organizational relationships, topic categorization, or decision tree discussed.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
+
+Focus on identifying:
+- Organizational structures or reporting relationships
+- Topic categorization or theme groupings
+- Decision hierarchies or priority levels
+- Project or task breakdown structures
+- Stakeholder hierarchies or influence levels
 
 Return a JSON object representing the hierarchy where each key has children as either:
 - An object (for sub-hierarchies)
 - An array (for leaf nodes)
+
+Guidelines:
+- Use clear, descriptive names for each level
+- Show the most important/high-level items at the top
+- Group related items together
+- Include relevant context from the meeting
+- ALL HIERARCHY NAMES AND LABELS MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -245,15 +330,23 @@ Return a JSON object representing the hierarchy where each key has children as e
             base_prompt += f"\nCustom requirements: {custom_prompt}\n"
         
         base_prompt += f"""
-Example format:
+Example format (labels will be in the transcript's language):
 {{
-  "CEO": {{
-    "VP Engineering": ["Team Lead A", "Team Lead B"],
-    "VP Sales": ["Sales Rep 1", "Sales Rep 2"]
+  "Project Leadership": {{
+    "Project Manager": ["Alice - overall coordination", "Bob - technical lead"],
+    "Stakeholders": ["Marketing team", "Executive sponsor"]
+  }},
+  "Main Discussion Topics": {{
+    "Technical Issues": ["Database performance", "API integration"],
+    "Timeline Concerns": ["Resource allocation", "Deadline feasibility"]
+  }},
+  "Action Items": {{
+    "Immediate (this week)": ["Update project plan", "Schedule team meeting"],
+    "Short-term (next month)": ["Complete prototype", "Conduct user testing"]
   }}
 }}
 
-Transcript:
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -277,15 +370,39 @@ Transcript:
         except Exception as e:
             logger.error(f"Error extracting hierarchy data: {e}")
             # Return simple fallback
-            return {"Root": ["Child A", "Child B"]}
+            return {
+                "Meeting Topics": {
+                    "Main Discussion": ["Key points discussed", "Important decisions made"],
+                    "Action Items": ["Tasks assigned", "Follow-up activities"]
+                }
+            }
 
     async def extract_chart_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[Dict, str]:
-        """Extract data for charts."""
-        base_prompt = """Analyze the following transcript and extract quantitative data for a chart.
+        """Extract data for charts from meeting content."""
+        base_prompt = """Analyze the following meeting transcript and extract quantitative data that could be visualized as a chart.
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
+
+Focus on identifying:
+- Numerical data mentioned (budgets, timelines, metrics, percentages)
+- Resource allocations or distributions
+- Performance metrics or KPIs
+- Survey results or feedback scores
+- Progress indicators or completion rates
+- Comparative data between options or alternatives
 
 Return a JSON object with:
 1. "data": Object with category names as keys and numbers as values
-2. "chart_type": Either "bar" or "pie"
+2. "chart_type": Either "bar", "pie", or "line" based on the data type
+3. "title": Descriptive title for the chart
+4. "unit": Unit of measurement (e.g., "hours", "dollars", "percentage", "count")
+
+Guidelines:
+- Extract actual numbers mentioned in the meeting
+- Use meaningful category names
+- Choose appropriate chart type for the data
+- Include relevant context in the title
+- ALL CATEGORY NAMES, TITLE, AND UNIT MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -293,13 +410,15 @@ Return a JSON object with:
             base_prompt += f"\nCustom requirements: {custom_prompt}\n"
         
         base_prompt += f"""
-Example format:
+Example format (labels will be in the transcript's language):
 {{
-  "data": {{"Category A": 25, "Category B": 45, "Category C": 30}},
-  "chart_type": "bar"
+  "data": {{"Development": 120, "Testing": 80, "Documentation": 40, "Deployment": 20}},
+  "chart_type": "bar",
+  "title": "Project Time Allocation (Hours)",
+  "unit": "hours"
 }}
 
-Transcript:
+Meeting Transcript:
 {transcript}"""
 
         try:
@@ -325,4 +444,4 @@ Transcript:
         except Exception as e:
             logger.error(f"Error extracting chart data: {e}")
             # Return simple fallback
-            return {"Item A": 30, "Item B": 70}, "bar" 
+            return {"Topic A": 30, "Topic B": 45, "Topic C": 25}, "bar" 

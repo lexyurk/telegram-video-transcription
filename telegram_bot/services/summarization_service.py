@@ -93,32 +93,37 @@ class SummarizationService:
             logger.info(f"Removed speaker labels for summarization. Original: {len(transcript)} chars, Clean: {len(clean_transcript)} chars")
 
             # Improved prompt for cleaner markdown output
-            prompt = f"""Please create a concise summary of this transcript with clear action points.
+            prompt = f"""Analyze this meeting transcript and create a focused summary with actionable insights.
 
-IMPORTANT FORMATTING RULES:
-- Use simple markdown: **bold** for headers, - for bullet points
-- Do NOT use complex formatting, nested lists, or special characters
-- Keep all markdown balanced (every ** must have a closing **)
-- Use plain text for most content, markdown only for emphasis
-- RESPOND IN THE SAME LANGUAGE AS THE TRANSCRIPT (if transcript is in Russian, respond in Russian, etc.)
+LANGUAGE: Respond in the same language as the transcript.
+
+FORMATTING: Use simple markdown - **bold** for headers, - for bullet points. Keep markdown balanced.
 
 Structure your response as:
 
-**Summary**
-[2-3 sentences summarizing the main discussion]
-
-**Key Points**
-- Point 1
-- Point 2  
-- Point 3
+**Key Decisions & Insights**
+- What decisions were made and why
+- Important insights or discoveries
+- Problems identified and solutions proposed
 
 **Action Items**
-- Action 1
-- Action 2
-- Action 3
+- [Person/Role] will [specific action] by [timeframe if mentioned]
+- Include who is responsible for each action
+- Prioritize urgent items first
+
+**Next Steps**
+- Immediate follow-ups needed
+- Dependencies or blockers mentioned
+- Future discussions or meetings planned
+
+Focus on:
+- WHY decisions were made, not just what was discussed
+- Concrete next steps with clear ownership
+- Key insights that drive the actions
+- Skip routine updates unless they impact decisions
 
 Transcript:
-{clean_transcript}"""  # Full transcript sent without artificial length limitations
+{clean_transcript}"""
 
             summary = await self.ai_model.generate_text(prompt)
             

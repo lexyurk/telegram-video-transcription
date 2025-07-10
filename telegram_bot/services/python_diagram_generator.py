@@ -21,14 +21,23 @@ class PythonDiagramGenerator:
 
     def __init__(self):
         """Initialize the diagram generator."""
-        # Color scheme
+        # Enhanced color scheme for meeting visualizations
         self.colors = {
+            'start': '#4CAF50',      # Green - start nodes
+            'process': '#2196F3',    # Blue - process nodes
+            'decision': '#FF9800',   # Orange - decision nodes
+            'action': '#F44336',     # Red - action items
+            'end': '#9C27B0',        # Purple - end nodes
+            'milestone': '#795548',  # Brown - milestones
+            'deadline': '#E91E63',   # Pink - deadlines
+            'discussion': '#607D8B', # Blue-grey - discussions
             'primary': '#4CAF50',
             'secondary': '#81C784', 
             'accent': '#2E7D32',
             'background': '#f8f9fa',
             'text': '#212529',
-            'border': '#45a049'
+            'border': '#45a049',
+            'relationship': '#3F51B5'  # Indigo - relationships
         }
         
         # Figure settings
@@ -36,14 +45,16 @@ class PythonDiagramGenerator:
         self.dpi = 100
 
     async def create_flowchart(self, nodes: List[Dict], edges: List[Tuple], title: str = "Process Flow") -> Optional[str]:
-        """Create a flowchart diagram."""
+        """Create a flowchart diagram optimized for meeting content."""
         try:
             # Create directed graph
             G = nx.DiGraph()
             
             # Add nodes with attributes
             for node in nodes:
-                G.add_node(node['id'], label=node['label'], node_type=node.get('type', 'process'))
+                G.add_node(node['id'], 
+                          label=node['label'], 
+                          node_type=node.get('type', 'process'))
             
             # Add edges
             for edge in edges:
@@ -54,54 +65,78 @@ class PythonDiagramGenerator:
             fig.patch.set_facecolor(self.colors['background'])
             ax.set_facecolor(self.colors['background'])
             
-            # Generate layout
-            pos = nx.spring_layout(G, k=3, iterations=50, seed=42)
+            # Generate layout with better spacing for meeting content
+            pos = nx.spring_layout(G, k=4, iterations=100, seed=42)
             
-            # Draw nodes with different shapes based on type
+            # Draw nodes with different colors and sizes based on type
             node_colors = []
-            node_shapes = []
+            node_sizes = []
             for node_id, data in G.nodes(data=True):
                 node_type = data.get('node_type', 'process')
                 if node_type == 'start':
-                    node_colors.append(self.colors['accent'])
-                    node_shapes.append('o')
+                    node_colors.append(self.colors['start'])
+                    node_sizes.append(3500)
                 elif node_type == 'end':
-                    node_colors.append(self.colors['primary'])
-                    node_shapes.append('s')
+                    node_colors.append(self.colors['end'])
+                    node_sizes.append(3500)
                 elif node_type == 'decision':
-                    node_colors.append(self.colors['secondary'])
-                    node_shapes.append('D')
-                else:
-                    node_colors.append(self.colors['primary'])
-                    node_shapes.append('o')
+                    node_colors.append(self.colors['decision'])
+                    node_sizes.append(4000)
+                elif node_type == 'action':
+                    node_colors.append(self.colors['action'])
+                    node_sizes.append(3800)
+                else:  # process
+                    node_colors.append(self.colors['process'])
+                    node_sizes.append(3200)
             
-            # Draw all nodes as circles (matplotlib limitation)
+            # Draw nodes
             nx.draw_networkx_nodes(
                 G, pos, 
                 node_color=node_colors,
-                node_size=3000,
+                node_size=node_sizes,
                 alpha=0.9,
                 ax=ax
             )
             
-            # Draw edges
+            # Draw edges with improved styling
             nx.draw_networkx_edges(
                 G, pos,
                 edge_color=self.colors['accent'],
                 arrows=True,
-                arrowsize=20,
+                arrowsize=25,
                 arrowstyle='->',
-                width=2,
+                width=2.5,
                 alpha=0.8,
                 ax=ax
             )
             
-            # Draw labels
-            labels = {node_id: data['label'] for node_id, data in G.nodes(data=True)}
+            # Draw labels with better formatting
+            labels = {}
+            for node_id, data in G.nodes(data=True):
+                label = data['label']
+                # Break long labels into multiple lines
+                if len(label) > 25:
+                    words = label.split()
+                    lines = []
+                    current_line = []
+                    for word in words:
+                        if len(' '.join(current_line + [word])) <= 25:
+                            current_line.append(word)
+                        else:
+                            if current_line:
+                                lines.append(' '.join(current_line))
+                                current_line = [word]
+                            else:
+                                lines.append(word)
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                    label = '\n'.join(lines)
+                labels[node_id] = label
+            
             nx.draw_networkx_labels(
                 G, pos, labels,
-                font_size=10,
-                font_color=self.colors['text'],
+                font_size=9,
+                font_color='white',
                 font_weight='bold',
                 ax=ax
             )
@@ -113,11 +148,24 @@ class PythonDiagramGenerator:
                     G, pos, edge_labels,
                     font_size=8,
                     font_color=self.colors['text'],
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.8),
                     ax=ax
                 )
             
+            # Add legend for node types
+            legend_elements = []
+            unique_types = set(data.get('node_type', 'process') for _, data in G.nodes(data=True))
+            for node_type in unique_types:
+                color = self.colors.get(node_type, self.colors['process'])
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
+                                                markerfacecolor=color, markersize=10, 
+                                                label=node_type.capitalize()))
+            
+            if legend_elements:
+                ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+            
             # Set title
-            ax.set_title(title, fontsize=16, fontweight='bold', color=self.colors['text'], pad=20)
+            ax.set_title(title, fontsize=18, fontweight='bold', color=self.colors['text'], pad=25)
             ax.axis('off')
             
             # Save to file
@@ -143,7 +191,7 @@ class PythonDiagramGenerator:
             return None
 
     async def create_relationship_diagram(self, entities: List[str], relationships: List[Tuple], title: str = "Relationships") -> Optional[str]:
-        """Create a relationship/network diagram."""
+        """Create a relationship/network diagram for meeting stakeholders and concepts."""
         try:
             # Create undirected graph for relationships
             G = nx.Graph()
@@ -151,11 +199,15 @@ class PythonDiagramGenerator:
             # Add nodes
             G.add_nodes_from(entities)
             
-            # Add edges with weights
+            # Add edges with weights and relationship types
+            edge_labels = {}
             for rel in relationships:
                 if len(rel) >= 2:
-                    weight = rel[2] if len(rel) > 2 else 1
-                    G.add_edge(rel[0], rel[1], weight=weight)
+                    weight = rel[2] if len(rel) > 2 and isinstance(rel[2], (int, float)) else 1
+                    rel_type = rel[3] if len(rel) > 3 else ""
+                    G.add_edge(rel[0], rel[1], weight=weight, rel_type=rel_type)
+                    if rel_type:
+                        edge_labels[(rel[0], rel[1])] = rel_type
             
             # Create figure
             fig, ax = plt.subplots(figsize=self.figure_size, dpi=self.dpi)
@@ -164,20 +216,28 @@ class PythonDiagramGenerator:
             
             # Generate layout
             if len(G.nodes()) <= 10:
-                pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+                pos = nx.spring_layout(G, k=3, iterations=100, seed=42)
             else:
                 pos = nx.kamada_kawai_layout(G)
             
             # Calculate node sizes based on degree centrality
             centrality = nx.degree_centrality(G)
-            node_sizes = [3000 + centrality[node] * 2000 for node in G.nodes()]
+            node_sizes = [2500 + centrality[node] * 3000 for node in G.nodes()]
+            
+            # Color nodes based on entity type (people vs concepts)
+            node_colors = []
+            for entity in entities:
+                if any(indicator in entity.lower() for indicator in ['(', 'team', 'dept', 'project']):
+                    node_colors.append(self.colors['secondary'])
+                else:
+                    node_colors.append(self.colors['primary'])
             
             # Draw nodes
             nx.draw_networkx_nodes(
                 G, pos,
-                node_color=self.colors['primary'],
+                node_color=node_colors,
                 node_size=node_sizes,
-                alpha=0.8,
+                alpha=0.9,
                 ax=ax
             )
             
@@ -188,22 +248,40 @@ class PythonDiagramGenerator:
             nx.draw_networkx_edges(
                 G, pos,
                 width=widths,
-                edge_color=self.colors['secondary'],
+                edge_color=self.colors['relationship'],
                 alpha=0.6,
                 ax=ax
             )
             
-            # Draw labels
+            # Draw node labels
+            labels = {}
+            for entity in entities:
+                # Truncate long entity names
+                if len(entity) > 15:
+                    labels[entity] = entity[:12] + "..."
+                else:
+                    labels[entity] = entity
+                    
             nx.draw_networkx_labels(
-                G, pos,
+                G, pos, labels,
                 font_size=9,
-                font_color=self.colors['text'],
+                font_color='white',
                 font_weight='bold',
                 ax=ax
             )
             
+            # Draw edge labels (relationship types)
+            if edge_labels:
+                nx.draw_networkx_edge_labels(
+                    G, pos, edge_labels,
+                    font_size=7,
+                    font_color=self.colors['text'],
+                    bbox=dict(boxstyle="round,pad=0.1", facecolor='white', alpha=0.8),
+                    ax=ax
+                )
+            
             # Set title
-            ax.set_title(title, fontsize=16, fontweight='bold', color=self.colors['text'], pad=20)
+            ax.set_title(title, fontsize=18, fontweight='bold', color=self.colors['text'], pad=25)
             ax.axis('off')
             
             # Save to file
@@ -229,7 +307,7 @@ class PythonDiagramGenerator:
             return None
 
     async def create_timeline_diagram(self, events: List[Dict], title: str = "Timeline") -> Optional[str]:
-        """Create a timeline diagram."""
+        """Create a timeline diagram for meeting events and milestones."""
         try:
             # Create figure
             fig, ax = plt.subplots(figsize=self.figure_size, dpi=self.dpi)
@@ -243,24 +321,37 @@ class PythonDiagramGenerator:
             y_pos = 0.5
             x_positions = []
             labels = []
+            colors = []
             
             for i, event in enumerate(sorted_events):
                 x_pos = i / (len(sorted_events) - 1) if len(sorted_events) > 1 else 0.5
                 x_positions.append(x_pos)
                 labels.append(event['label'])
+                
+                # Color based on event type
+                event_type = event.get('type', 'discussion')
+                colors.append(self.colors.get(event_type, self.colors['discussion']))
             
             # Draw timeline line
-            ax.plot([0, 1], [y_pos, y_pos], color=self.colors['accent'], linewidth=4, alpha=0.8)
+            ax.plot([0, 1], [y_pos, y_pos], color=self.colors['accent'], linewidth=6, alpha=0.8)
             
             # Draw event points and labels
-            for i, (x_pos, label) in enumerate(zip(x_positions, labels)):
+            for i, (x_pos, label, color) in enumerate(zip(x_positions, labels, colors)):
                 # Draw point
-                ax.scatter(x_pos, y_pos, s=200, color=self.colors['primary'], zorder=5, alpha=0.9)
+                ax.scatter(x_pos, y_pos, s=300, color=color, zorder=5, alpha=0.9, 
+                          edgecolors='white', linewidth=2)
                 
-                # Draw label
-                y_offset = 0.1 if i % 2 == 0 else -0.1
+                # Draw label with better positioning
+                y_offset = 0.15 if i % 2 == 0 else -0.15
+                
+                # Add timeframe information if available
+                event = sorted_events[i]
+                full_label = label
+                if event.get('timeframe'):
+                    full_label = f"{label}\n({event['timeframe']})"
+                
                 ax.annotate(
-                    label,
+                    full_label,
                     (x_pos, y_pos),
                     xytext=(x_pos, y_pos + y_offset),
                     ha='center',
@@ -268,16 +359,30 @@ class PythonDiagramGenerator:
                     fontsize=10,
                     fontweight='bold',
                     color=self.colors['text'],
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor=self.colors['secondary'], alpha=0.7),
-                    arrowprops=dict(arrowstyle='->', color=self.colors['accent'], alpha=0.7)
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor=color, alpha=0.8, 
+                             edgecolor='white', linewidth=1),
+                    arrowprops=dict(arrowstyle='->', color=self.colors['accent'], 
+                                  alpha=0.8, lw=2)
                 )
             
+            # Add legend for event types
+            legend_elements = []
+            unique_types = set(event.get('type', 'discussion') for event in sorted_events)
+            for event_type in unique_types:
+                color = self.colors.get(event_type, self.colors['discussion'])
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
+                                                markerfacecolor=color, markersize=12, 
+                                                label=event_type.capitalize()))
+            
+            if legend_elements:
+                ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0, 1))
+            
             # Set title
-            ax.set_title(title, fontsize=16, fontweight='bold', color=self.colors['text'], pad=20)
+            ax.set_title(title, fontsize=18, fontweight='bold', color=self.colors['text'], pad=25)
             
             # Clean up axes
             ax.set_xlim(-0.1, 1.1)
-            ax.set_ylim(0, 1)
+            ax.set_ylim(-0.1, 1.1)
             ax.axis('off')
             
             # Save to file
@@ -401,7 +506,7 @@ class PythonDiagramGenerator:
             return None
 
     async def create_simple_chart(self, data: Dict, chart_type: str = "bar", title: str = "Chart") -> Optional[str]:
-        """Create a simple chart (bar, pie, etc.)."""
+        """Create a simple chart (bar, pie, etc.) for meeting data."""
         try:
             # Create figure
             fig, ax = plt.subplots(figsize=self.figure_size, dpi=self.dpi)
@@ -420,7 +525,18 @@ class PythonDiagramGenerator:
                 for autotext in autotexts:
                     autotext.set_color('white')
                     autotext.set_fontweight('bold')
+                    autotext.set_fontsize(10)
                     
+            elif chart_type == "line":
+                # Line chart for time series data
+                colors = sns.color_palette("husl", 1)
+                ax.plot(labels, values, marker='o', linewidth=3, markersize=8, 
+                       color=colors[0], alpha=0.8)
+                ax.grid(True, alpha=0.3)
+                ax.set_xlabel('Categories', fontweight='bold', fontsize=12)
+                ax.set_ylabel('Values', fontweight='bold', fontsize=12)
+                plt.xticks(rotation=45, ha='right')
+                
             else:  # bar chart
                 colors = sns.color_palette("husl", len(labels))
                 bars = ax.bar(labels, values, color=colors, alpha=0.8)
@@ -430,14 +546,15 @@ class PythonDiagramGenerator:
                     height = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2., height,
                            f'{height:.1f}',
-                           ha='center', va='bottom', fontweight='bold')
+                           ha='center', va='bottom', fontweight='bold', fontsize=10)
                 
-                ax.set_xlabel('Categories', fontweight='bold')
-                ax.set_ylabel('Values', fontweight='bold')
+                ax.set_xlabel('Categories', fontweight='bold', fontsize=12)
+                ax.set_ylabel('Values', fontweight='bold', fontsize=12)
+                ax.grid(True, alpha=0.3, axis='y')
                 plt.xticks(rotation=45, ha='right')
             
             # Set title
-            ax.set_title(title, fontsize=16, fontweight='bold', color=self.colors['text'], pad=20)
+            ax.set_title(title, fontsize=18, fontweight='bold', color=self.colors['text'], pad=25)
             
             # Save to file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

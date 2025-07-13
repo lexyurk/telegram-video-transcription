@@ -17,25 +17,25 @@ class DiagramDataExtractor:
 
     async def analyze_transcript_for_diagram_type(self, transcript: str) -> str:
         """Analyze transcript and determine the best diagram type."""
-        prompt = f"""Analyze the following meeting transcript and determine what type of diagram would best represent the content.
+        prompt = f"""Analyze the following technical discussion transcript and determine what type of diagram would best visualize the SYSTEMS and ARCHITECTURE discussed.
 
-Choose from these diagram types based on the meeting content:
-- flowchart: For processes, workflows, decision trees, step-by-step procedures, or problem-solving discussions
-- relationship: For connections between people, teams, concepts, stakeholders, or organizational interactions
-- timeline: For chronological events, project phases, milestones, or sequential discussion points
-- hierarchy: For organizational structures, reporting relationships, or categorized topics
-- chart: For data comparisons, statistics, metrics, or quantitative information discussed
+Choose from these diagram types based on the technical content:
+- flowchart: For system architectures, data flows, API interactions, microservices, system components and their interactions
+- relationship: For database schemas, entity relationships, service dependencies, module interactions, or technology stack connections
+- timeline: For deployment schedules, release plans, migration timelines, or development phases
+- hierarchy: For system layers, component hierarchies, inheritance structures, or nested configurations
+- chart: For performance metrics, resource usage, scaling data, or technical comparisons
 
-Consider what would be most valuable for someone reviewing this meeting:
-- Are there clear processes or workflows discussed?
-- Are there relationships between people, teams, or concepts that need visualization?
-- Is there a timeline of events or project phases?
-- Are there hierarchical structures or categorizations?
-- Is there quantitative data that could be visualized?
+Focus on extracting TECHNICAL SYSTEMS, not conversation flow:
+- Are there system components, services, or APIs discussed?
+- Are there data flows or integration points between systems?
+- Are there databases, schemas, or data relationships mentioned?
+- Are there technical dependencies or architectural layers?
+- Are there performance metrics or technical comparisons?
 
 Return ONLY the diagram type (one word in English: flowchart, relationship, timeline, hierarchy, or chart).
 
-Meeting Transcript:
+Technical Discussion Transcript:
 {transcript}"""
 
         try:
@@ -56,28 +56,28 @@ Meeting Transcript:
             return 'flowchart'  # Default fallback
 
     async def extract_flowchart_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[List[Dict], List[Tuple]]:
-        """Extract nodes and edges for a flowchart focused on meeting content."""
-        base_prompt = """Analyze the following meeting transcript and extract a flowchart structure that represents the key discussion flow, decision points, and action items.
+        """Extract nodes and edges for a flowchart focused on system architecture."""
+        base_prompt = """Analyze the following technical discussion and extract a system architecture diagram showing the TECHNICAL COMPONENTS and their interactions.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
 
-Focus on creating a meaningful flowchart that shows:
-- Main discussion topics as process nodes
-- Decision points and their outcomes
-- Action items and next steps
-- Key milestones or checkpoints mentioned
-- Problem-solving steps discussed
+Focus on identifying and visualizing:
+- System components (services, APIs, databases, queues, caches)
+- Data flows between components
+- External integrations and third-party services
+- Processing pipelines and workflows
+- Technical decision points (load balancers, routers, gateways)
 
 Return a JSON object with two arrays:
-1. "nodes": Array of objects with {"id": "unique_id", "label": "descriptive_label", "type": "start|process|decision|action|end"}
-2. "edges": Array of arrays like ["from_id", "to_id", "optional_label"]
+1. "nodes": Array of objects with {"id": "unique_id", "label": "component_name", "type": "service|database|api|queue|cache|external|gateway"}
+2. "edges": Array of arrays like ["from_id", "to_id", "data_flow_label"]
 
 Guidelines:
-- Use descriptive labels (up to 40 characters) that capture the essence of each step
-- Include decision points with yes/no or multiple choice outcomes
-- Show action items as distinct nodes
-- Connect related discussion points logically
-- Start with the main meeting topic and end with outcomes/next steps
+- Extract ACTUAL SYSTEM COMPONENTS mentioned, not discussion topics
+- Use technical component names (e.g., "PostgreSQL", "Redis Cache", "Auth Service")
+- Show data flow directions with meaningful labels (e.g., "HTTP Request", "Event Stream", "SQL Query")
+- Group related services logically
+- Focus on technical architecture, not people or process
 - ALL LABELS AND TEXT MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
@@ -89,26 +89,27 @@ Guidelines:
 Example format (labels will be in the transcript's language):
 {{
   "nodes": [
-    {{"id": "start", "label": "Meeting: Project Status Review", "type": "start"}},
-    {{"id": "status", "label": "Current Status Discussion", "type": "process"}},
-    {{"id": "issues", "label": "Are there blockers?", "type": "decision"}},
-    {{"id": "resolve", "label": "Plan Resolution Strategy", "type": "process"}},
-    {{"id": "action1", "label": "Action: Update timeline", "type": "action"}},
-    {{"id": "next", "label": "Schedule follow-up", "type": "action"}},
-    {{"id": "end", "label": "Meeting concluded", "type": "end"}}
+    {{"id": "frontend", "label": "React Frontend", "type": "service"}},
+    {{"id": "api_gateway", "label": "API Gateway", "type": "gateway"}},
+    {{"id": "auth_service", "label": "Auth Service", "type": "service"}},
+    {{"id": "user_service", "label": "User Service", "type": "service"}},
+    {{"id": "postgres_db", "label": "PostgreSQL", "type": "database"}},
+    {{"id": "redis_cache", "label": "Redis Cache", "type": "cache"}},
+    {{"id": "kafka", "label": "Kafka Queue", "type": "queue"}},
+    {{"id": "payment_api", "label": "Stripe API", "type": "external"}}
   ],
   "edges": [
-    ["start", "status"],
-    ["status", "issues"],
-    ["issues", "resolve", "Yes"],
-    ["issues", "next", "No"],
-    ["resolve", "action1"],
-    ["action1", "next"],
-    ["next", "end"]
+    ["frontend", "api_gateway", "HTTPS"],
+    ["api_gateway", "auth_service", "JWT Validation"],
+    ["api_gateway", "user_service", "REST API"],
+    ["user_service", "postgres_db", "SQL Query"],
+    ["user_service", "redis_cache", "Cache Read/Write"],
+    ["user_service", "kafka", "Event Publish"],
+    ["user_service", "payment_api", "Payment Request"]
   ]
 }}
 
-Meeting Transcript:
+Technical Discussion Transcript:
 {transcript}"""
 
         try:
@@ -141,36 +142,37 @@ Meeting Transcript:
             logger.error(f"Error extracting flowchart data: {e}")
             # Return simple fallback structure
             return [
-                {"id": "start", "label": "Meeting Start", "type": "start"},
-                {"id": "main", "label": "Main Discussion", "type": "process"},
-                {"id": "action", "label": "Action Items Identified", "type": "action"},
-                {"id": "end", "label": "Meeting End", "type": "end"}
-            ], [("start", "main"), ("main", "action"), ("action", "end")]
+                {"id": "client", "label": "Client App", "type": "service"},
+                {"id": "server", "label": "Backend Server", "type": "service"},
+                {"id": "database", "label": "Database", "type": "database"},
+                {"id": "cache", "label": "Cache Layer", "type": "cache"}
+            ], [("client", "server"), ("server", "database"), ("server", "cache")]
 
     async def extract_relationship_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[List[str], List[Tuple]]:
-        """Extract entities and relationships from meeting content."""
-        base_prompt = """Analyze the following meeting transcript and extract relationships between people, teams, concepts, projects, or systems discussed.
+        """Extract technical entities and their relationships."""
+        base_prompt = """Analyze the following technical discussion and extract relationships between technical components, systems, databases, and services.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
 
-Focus on identifying:
-- People mentioned and their roles/interactions
-- Teams or departments and their collaborations
-- Projects or initiatives and their dependencies
-- Systems or processes and their connections
-- Concepts or topics and their relationships
+Focus on identifying TECHNICAL relationships:
+- Database tables and their foreign key relationships
+- Services and their dependencies
+- APIs and their consumers
+- Data models and their associations
+- Modules/packages and their imports
+- Technology stack layers and interactions
 
 Return a JSON object with two arrays:
-1. "entities": Array of entity names (people, teams, projects, concepts, systems)
+1. "entities": Array of technical entity names (services, databases, tables, APIs, modules)
 2. "relationships": Array of arrays like ["entity1", "entity2", weight, "relationship_type"] where:
-   - weight is 1-5 (strength of relationship: 1=weak mention, 5=strong dependency)
-   - relationship_type describes the connection (e.g., "collaborates with", "depends on", "reports to", "discussed together")
+   - weight is 1-5 (strength of coupling: 1=loose, 5=tight dependency)
+   - relationship_type describes the technical relationship (e.g., "calls API", "reads from", "publishes to", "inherits from", "implements")
 
 Guidelines:
-- Use clear, descriptive entity names
-- Include both people and non-people entities
-- Show both direct and indirect relationships
-- Prioritize relationships that are important for understanding the meeting outcomes
+- Extract TECHNICAL ENTITIES only (no people or teams)
+- Use specific technical names (e.g., "users_table", "AuthenticationAPI", "PaymentService")
+- Show technical dependencies and data flows
+- Focus on system architecture relationships
 - ALL ENTITY NAMES AND RELATIONSHIP TYPES MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
@@ -181,17 +183,20 @@ Guidelines:
         base_prompt += f"""
 Example format (names will be in the transcript's language):
 {{
-  "entities": ["Alice (PM)", "Bob (Dev)", "Marketing Team", "Project Alpha", "Database Migration", "Q4 Goals"],
+  "entities": ["UserService", "AuthService", "users_table", "sessions_table", "RedisCache", "PostgreSQL", "REST API", "JWT Token"],
   "relationships": [
-    ["Alice (PM)", "Bob (Dev)", 4, "collaborates with"],
-    ["Alice (PM)", "Project Alpha", 5, "manages"],
-    ["Bob (Dev)", "Database Migration", 3, "responsible for"],
-    ["Project Alpha", "Q4 Goals", 4, "contributes to"],
-    ["Marketing Team", "Project Alpha", 2, "stakeholder in"]
+    ["UserService", "AuthService", 4, "calls API"],
+    ["UserService", "users_table", 5, "reads/writes"],
+    ["AuthService", "sessions_table", 5, "manages"],
+    ["AuthService", "JWT Token", 4, "generates"],
+    ["UserService", "RedisCache", 3, "caches to"],
+    ["users_table", "PostgreSQL", 5, "stored in"],
+    ["sessions_table", "PostgreSQL", 5, "stored in"],
+    ["REST API", "JWT Token", 4, "secured by"]
   ]
 }}
 
-Meeting Transcript:
+Technical Discussion Transcript:
 {transcript}"""
 
         try:
@@ -223,7 +228,7 @@ Meeting Transcript:
         except Exception as e:
             logger.error(f"Error extracting relationship data: {e}")
             # Return simple fallback
-            return ["Participant A", "Participant B", "Main Topic"], [("Participant A", "Participant B", 3, "discussed with"), ("Participant A", "Main Topic", 4, "presented")]
+            return ["Frontend", "Backend API", "Database"], [("Frontend", "Backend API", 4, "calls"), ("Backend API", "Database", 5, "queries")]
 
     async def extract_timeline_data(self, transcript: str, custom_prompt: Optional[str] = None) -> List[Dict]:
         """Extract timeline events from meeting content."""
@@ -301,27 +306,28 @@ Meeting Transcript:
             ]
 
     async def extract_hierarchy_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Dict:
-        """Extract hierarchical structure from meeting content."""
-        base_prompt = """Analyze the following meeting transcript and extract a hierarchical structure that represents organizational relationships, topic categorization, or decision tree discussed.
+        """Extract technical hierarchical structure from discussion."""
+        base_prompt = """Analyze the following technical discussion and extract a hierarchical structure representing the SYSTEM ARCHITECTURE LAYERS or COMPONENT HIERARCHY.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
 
-Focus on identifying:
-- Organizational structures or reporting relationships
-- Topic categorization or theme groupings
-- Decision hierarchies or priority levels
-- Project or task breakdown structures
-- Stakeholder hierarchies or influence levels
+Focus on identifying TECHNICAL hierarchies:
+- System architecture layers (presentation, business logic, data layer)
+- Component hierarchies (parent services and their sub-components)
+- Technology stack layers (frontend frameworks, backend, infrastructure)
+- Module/package structures and dependencies
+- API endpoint hierarchies and resources
+- Configuration hierarchies or nested settings
 
-Return a JSON object representing the hierarchy where each key has children as either:
+Return a JSON object representing the technical hierarchy where each key has children as either:
 - An object (for sub-hierarchies)
-- An array (for leaf nodes)
+- An array (for leaf components)
 
 Guidelines:
-- Use clear, descriptive names for each level
-- Show the most important/high-level items at the top
-- Group related items together
-- Include relevant context from the meeting
+- Extract TECHNICAL COMPONENTS AND LAYERS only
+- Use specific technical names (e.g., "API Gateway", "Microservices", "Data Access Layer")
+- Show architectural layers from high-level to detailed
+- Group related technical components together
 - ALL HIERARCHY NAMES AND LABELS MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
@@ -332,21 +338,29 @@ Guidelines:
         base_prompt += f"""
 Example format (labels will be in the transcript's language):
 {{
-  "Project Leadership": {{
-    "Project Manager": ["Alice - overall coordination", "Bob - technical lead"],
-    "Stakeholders": ["Marketing team", "Executive sponsor"]
+  "Frontend Layer": {{
+    "React Application": ["Components", "State Management (Redux)", "API Client"],
+    "Mobile Apps": ["iOS (Swift)", "Android (Kotlin)", "React Native Shared"]
   }},
-  "Main Discussion Topics": {{
-    "Technical Issues": ["Database performance", "API integration"],
-    "Timeline Concerns": ["Resource allocation", "Deadline feasibility"]
+  "Backend Services": {{
+    "API Gateway": ["Authentication", "Rate Limiting", "Request Routing"],
+    "Microservices": {{
+      "User Service": ["User CRUD", "Profile Management", "Preferences"],
+      "Order Service": ["Order Processing", "Payment Integration", "Inventory Check"],
+      "Notification Service": ["Email Sender", "SMS Gateway", "Push Notifications"]
+    }}
   }},
-  "Action Items": {{
-    "Immediate (this week)": ["Update project plan", "Schedule team meeting"],
-    "Short-term (next month)": ["Complete prototype", "Conduct user testing"]
+  "Data Layer": {{
+    "Databases": ["PostgreSQL (Primary)", "MongoDB (Documents)", "Redis (Cache)"],
+    "Message Queue": ["Kafka Topics", "Event Consumers", "Dead Letter Queue"]
+  }},
+  "Infrastructure": {{
+    "Kubernetes Cluster": ["Pods", "Services", "Ingress Controllers"],
+    "Monitoring": ["Prometheus", "Grafana", "ELK Stack"]
   }}
 }}
 
-Meeting Transcript:
+Technical Discussion Transcript:
 {transcript}"""
 
         try:
@@ -371,38 +385,39 @@ Meeting Transcript:
             logger.error(f"Error extracting hierarchy data: {e}")
             # Return simple fallback
             return {
-                "Meeting Topics": {
-                    "Main Discussion": ["Key points discussed", "Important decisions made"],
-                    "Action Items": ["Tasks assigned", "Follow-up activities"]
-                }
+                "Application Layer": {
+                    "Frontend": ["UI Components", "Client Logic"],
+                    "Backend": ["API Endpoints", "Business Logic"]
+                },
+                "Data Layer": ["Database", "Cache"]
             }
 
     async def extract_chart_data(self, transcript: str, custom_prompt: Optional[str] = None) -> Tuple[Dict, str]:
-        """Extract data for charts from meeting content."""
-        base_prompt = """Analyze the following meeting transcript and extract quantitative data that could be visualized as a chart.
+        """Extract technical metrics and performance data for visualization."""
+        base_prompt = """Analyze the following technical discussion and extract quantitative metrics or performance data that could be visualized as a chart.
 
 IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Russian, respond in Russian. If in Spanish, respond in Spanish. If in English, respond in English, etc.
 
-Focus on identifying:
-- Numerical data mentioned (budgets, timelines, metrics, percentages)
-- Resource allocations or distributions
-- Performance metrics or KPIs
-- Survey results or feedback scores
-- Progress indicators or completion rates
-- Comparative data between options or alternatives
+Focus on identifying TECHNICAL METRICS:
+- Performance benchmarks (response times, throughput, latency)
+- Resource utilization (CPU, memory, disk usage)
+- System metrics (requests/sec, error rates, uptime)
+- Code quality metrics (test coverage, code complexity, bug counts)
+- Infrastructure costs or resource allocation
+- Scalability metrics (concurrent users, data volume)
 
 Return a JSON object with:
-1. "data": Object with category names as keys and numbers as values
-2. "chart_type": Either "bar", "pie", or "line" based on the data type
-3. "title": Descriptive title for the chart
-4. "unit": Unit of measurement (e.g., "hours", "dollars", "percentage", "count")
+1. "data": Object with metric names as keys and numbers as values
+2. "chart_type": Either "bar", "pie", or "line" based on the metric type
+3. "title": Technical title for the chart
+4. "unit": Unit of measurement (e.g., "ms", "requests/sec", "GB", "%")
 
 Guidelines:
-- Extract actual numbers mentioned in the meeting
-- Use meaningful category names
-- Choose appropriate chart type for the data
-- Include relevant context in the title
-- ALL CATEGORY NAMES, TITLE, AND UNIT MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
+- Extract ACTUAL TECHNICAL METRICS mentioned
+- Use precise technical terminology
+- Choose chart type appropriate for the metric
+- Include measurement units in the title
+- ALL METRIC NAMES, TITLE, AND UNIT MUST BE IN THE SAME LANGUAGE AS THE TRANSCRIPT
 
 """
         
@@ -412,13 +427,13 @@ Guidelines:
         base_prompt += f"""
 Example format (labels will be in the transcript's language):
 {{
-  "data": {{"Development": 120, "Testing": 80, "Documentation": 40, "Deployment": 20}},
+  "data": {{"API Gateway": 45, "Auth Service": 120, "User Service": 85, "Database": 250}},
   "chart_type": "bar",
-  "title": "Project Time Allocation (Hours)",
-  "unit": "hours"
+  "title": "Service Response Times",
+  "unit": "ms"
 }}
 
-Meeting Transcript:
+Technical Discussion Transcript:
 {transcript}"""
 
         try:
@@ -444,4 +459,4 @@ Meeting Transcript:
         except Exception as e:
             logger.error(f"Error extracting chart data: {e}")
             # Return simple fallback
-            return {"Topic A": 30, "Topic B": 45, "Topic C": 25}, "bar" 
+            return {"Service A": 100, "Service B": 150, "Service C": 75}, "bar" 

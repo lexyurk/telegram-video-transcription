@@ -23,29 +23,39 @@ class PythonDiagramGenerator:
         """Initialize the diagram generator."""
         # Enhanced color scheme for meeting visualizations
         self.colors = {
-            'start': '#4CAF50',      # Green - start nodes
-            'process': '#2196F3',    # Blue - process nodes
-            'decision': '#FF9800',   # Orange - decision nodes
-            'action': '#F44336',     # Red - action items
-            'end': '#9C27B0',        # Purple - end nodes
-            'milestone': '#795548',  # Brown - milestones
-            'deadline': '#E91E63',   # Pink - deadlines
-            'discussion': '#607D8B', # Blue-grey - discussions
+            # Technical component colors
+            'service': '#2196F3',    # Blue - services/microservices
+            'database': '#4CAF50',   # Green - databases
+            'api': '#FF9800',        # Orange - APIs
+            'queue': '#9C27B0',      # Purple - message queues
+            'cache': '#F44336',      # Red - cache layers
+            'external': '#607D8B',   # Blue-grey - external services
+            'gateway': '#795548',    # Brown - gateways/proxies
+            # Legacy colors for backward compatibility
+            'start': '#4CAF50',      
+            'process': '#2196F3',    
+            'decision': '#FF9800',   
+            'action': '#F44336',     
+            'end': '#9C27B0',        
+            'milestone': '#795548',  
+            'deadline': '#E91E63',   
+            'discussion': '#607D8B', 
             'primary': '#4CAF50',
             'secondary': '#81C784', 
             'accent': '#2E7D32',
-            'background': '#f8f9fa',
+            'background': '#ffffff',
             'text': '#212529',
-            'border': '#45a049',
-            'relationship': '#3F51B5'  # Indigo - relationships
+            'border': '#e0e0e0',
+            'relationship': '#3F51B5',
+            'edge': '#666666'
         }
         
         # Figure settings
         self.figure_size = (19.2, 10.8)  # 1920x1080 at 100 DPI
         self.dpi = 100
 
-    async def create_flowchart(self, nodes: List[Dict], edges: List[Tuple], title: str = "Process Flow") -> Optional[str]:
-        """Create a flowchart diagram optimized for meeting content."""
+    async def create_flowchart(self, nodes: List[Dict], edges: List[Tuple], title: str = "System Architecture") -> Optional[str]:
+        """Create a flowchart diagram optimized for system architecture visualization."""
         try:
             # Create directed graph
             G = nx.DiGraph()
@@ -54,7 +64,7 @@ class PythonDiagramGenerator:
             for node in nodes:
                 G.add_node(node['id'], 
                           label=node['label'], 
-                          node_type=node.get('type', 'process'))
+                          node_type=node.get('type', 'service'))
             
             # Add edges
             for edge in edges:
@@ -65,29 +75,38 @@ class PythonDiagramGenerator:
             fig.patch.set_facecolor(self.colors['background'])
             ax.set_facecolor(self.colors['background'])
             
-            # Generate layout with better spacing for meeting content
-            pos = nx.spring_layout(G, k=4, iterations=100, seed=42)
+            # Use hierarchical layout for better system architecture visualization
+            try:
+                # Try hierarchical layout first
+                pos = nx.nx_agraph.graphviz_layout(G, prog='dot')
+            except:
+                # Fallback to spring layout with better spacing
+                pos = nx.spring_layout(G, k=5, iterations=150, seed=42)
             
             # Draw nodes with different colors and sizes based on type
             node_colors = []
             node_sizes = []
+            node_shapes = []
             for node_id, data in G.nodes(data=True):
-                node_type = data.get('node_type', 'process')
-                if node_type == 'start':
-                    node_colors.append(self.colors['start'])
-                    node_sizes.append(3500)
-                elif node_type == 'end':
-                    node_colors.append(self.colors['end'])
-                    node_sizes.append(3500)
-                elif node_type == 'decision':
-                    node_colors.append(self.colors['decision'])
-                    node_sizes.append(4000)
-                elif node_type == 'action':
-                    node_colors.append(self.colors['action'])
+                node_type = data.get('node_type', 'service')
+                
+                # Set colors based on technical component type
+                if node_type in self.colors:
+                    node_colors.append(self.colors[node_type])
+                else:
+                    node_colors.append(self.colors['service'])  # Default
+                
+                # Set sizes based on component type
+                if node_type == 'database':
+                    node_sizes.append(4500)
+                elif node_type == 'gateway':
+                    node_sizes.append(4200)
+                elif node_type == 'external':
                     node_sizes.append(3800)
-                else:  # process
-                    node_colors.append(self.colors['process'])
-                    node_sizes.append(3200)
+                elif node_type == 'cache':
+                    node_sizes.append(3500)
+                else:
+                    node_sizes.append(4000)
             
             # Draw nodes
             nx.draw_networkx_nodes(
@@ -101,13 +120,14 @@ class PythonDiagramGenerator:
             # Draw edges with improved styling
             nx.draw_networkx_edges(
                 G, pos,
-                edge_color=self.colors['accent'],
+                edge_color=self.colors['edge'],
                 arrows=True,
-                arrowsize=25,
+                arrowsize=20,
                 arrowstyle='->',
-                width=2.5,
-                alpha=0.8,
-                ax=ax
+                width=2,
+                alpha=0.7,
+                ax=ax,
+                connectionstyle="arc3,rad=0.1"
             )
             
             # Draw labels with better formatting
@@ -115,12 +135,12 @@ class PythonDiagramGenerator:
             for node_id, data in G.nodes(data=True):
                 label = data['label']
                 # Break long labels into multiple lines
-                if len(label) > 25:
+                if len(label) > 20:
                     words = label.split()
                     lines = []
                     current_line = []
                     for word in words:
-                        if len(' '.join(current_line + [word])) <= 25:
+                        if len(' '.join(current_line + [word])) <= 20:
                             current_line.append(word)
                         else:
                             if current_line:
@@ -135,10 +155,11 @@ class PythonDiagramGenerator:
             
             nx.draw_networkx_labels(
                 G, pos, labels,
-                font_size=9,
+                font_size=10,
                 font_color='white',
                 font_weight='bold',
-                ax=ax
+                ax=ax,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor='black', alpha=0.8)
             )
             
             # Draw edge labels
@@ -146,23 +167,37 @@ class PythonDiagramGenerator:
             if edge_labels:
                 nx.draw_networkx_edge_labels(
                     G, pos, edge_labels,
-                    font_size=8,
+                    font_size=9,
                     font_color=self.colors['text'],
-                    bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.8),
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor='#f0f0f0', alpha=0.9),
                     ax=ax
                 )
             
             # Add legend for node types
             legend_elements = []
-            unique_types = set(data.get('node_type', 'process') for _, data in G.nodes(data=True))
-            for node_type in unique_types:
-                color = self.colors.get(node_type, self.colors['process'])
+            unique_types = set(data.get('node_type', 'service') for _, data in G.nodes(data=True))
+            
+            # Define better labels for technical components
+            type_labels = {
+                'service': 'Service/API',
+                'database': 'Database',
+                'cache': 'Cache',
+                'queue': 'Message Queue',
+                'external': 'External Service',
+                'gateway': 'API Gateway',
+                'api': 'API Endpoint'
+            }
+            
+            for node_type in sorted(unique_types):
+                color = self.colors.get(node_type, self.colors['service'])
+                label = type_labels.get(node_type, node_type.capitalize())
                 legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', 
-                                                markerfacecolor=color, markersize=10, 
-                                                label=node_type.capitalize()))
+                                                markerfacecolor=color, markersize=12, 
+                                                label=label))
             
             if legend_elements:
-                ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+                ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1),
+                         frameon=True, fancybox=True, shadow=True)
             
             # Set title
             ax.set_title(title, fontsize=18, fontweight='bold', color=self.colors['text'], pad=25)
@@ -190,11 +225,11 @@ class PythonDiagramGenerator:
             logger.error(f"Error creating flowchart: {e}", exc_info=True)
             return None
 
-    async def create_relationship_diagram(self, entities: List[str], relationships: List[Tuple], title: str = "Relationships") -> Optional[str]:
-        """Create a relationship/network diagram for meeting stakeholders and concepts."""
+    async def create_relationship_diagram(self, entities: List[str], relationships: List[Tuple], title: str = "System Dependencies") -> Optional[str]:
+        """Create a relationship/network diagram for technical dependencies and connections."""
         try:
-            # Create undirected graph for relationships
-            G = nx.Graph()
+            # Create directed graph for technical dependencies
+            G = nx.DiGraph()
             
             # Add nodes
             G.add_nodes_from(entities)
@@ -224,11 +259,18 @@ class PythonDiagramGenerator:
             centrality = nx.degree_centrality(G)
             node_sizes = [2500 + centrality[node] * 3000 for node in G.nodes()]
             
-            # Color nodes based on entity type (people vs concepts)
+            # Color nodes based on technical entity type
             node_colors = []
             for entity in entities:
-                if any(indicator in entity.lower() for indicator in ['(', 'team', 'dept', 'project']):
-                    node_colors.append(self.colors['secondary'])
+                entity_lower = entity.lower()
+                if any(db in entity_lower for db in ['db', 'database', 'postgres', 'mysql', 'mongo']):
+                    node_colors.append(self.colors['database'])
+                elif any(svc in entity_lower for svc in ['service', 'api', 'endpoint']):
+                    node_colors.append(self.colors['service'])
+                elif any(cache in entity_lower for cache in ['cache', 'redis', 'memcached']):
+                    node_colors.append(self.colors['cache'])
+                elif any(queue in entity_lower for queue in ['queue', 'kafka', 'rabbitmq', 'sqs']):
+                    node_colors.append(self.colors['queue'])
                 else:
                     node_colors.append(self.colors['primary'])
             
@@ -243,14 +285,18 @@ class PythonDiagramGenerator:
             
             # Draw edges with varying thickness based on weight
             edges = G.edges(data=True)
-            widths = [edge[2].get('weight', 1) * 2 for edge in edges]
+            widths = [edge[2].get('weight', 1) * 1.5 for edge in edges]
             
             nx.draw_networkx_edges(
                 G, pos,
                 width=widths,
-                edge_color=self.colors['relationship'],
-                alpha=0.6,
-                ax=ax
+                edge_color=self.colors['edge'],
+                alpha=0.7,
+                arrows=True,
+                arrowsize=15,
+                arrowstyle='->',
+                ax=ax,
+                connectionstyle="arc3,rad=0.1"
             )
             
             # Draw node labels

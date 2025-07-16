@@ -22,6 +22,7 @@ from telegram_bot.services import (
     SummarizationService,
     SpeakerIdentificationService,
     DiagramService,
+    QuestionAnsweringService,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 
@@ -36,6 +37,7 @@ class TelegramTranscriptionBot:
         self.speaker_identification_service = SpeakerIdentificationService()
         self.file_service = FileService()
         self.diagram_service = DiagramService()
+        self.question_answering_service = QuestionAnsweringService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -76,7 +78,14 @@ Welcome! I can transcribe your video and audio files and create summaries with a
 /help - Show help
 /diagram - Create a diagram from a transcript (reply to a .txt file)
 
-**New Feature! 📊 Diagram Generation:**
+**🆕 New Features:**
+
+**🤖 Ask Questions About Transcripts (Claude Sonnet 4):**
+• Reply to any transcript file with your question
+• Get detailed answers about the content using Claude Sonnet 4
+• Examples: "What were the main decisions made?", "Who spoke the most?", "What are the action items?"
+
+**📊 Diagram Generation:**
 • Reply to any transcript file with `/diagram` to create a visual diagram
 • Use `/diagram <custom prompt>` to specify what the diagram should show
 • Examples: `/diagram show the decision flow`, `/diagram map relationships`
@@ -232,6 +241,154 @@ Just send me a file and I'll handle the rest! 🚀
                 f"❌ **Error creating diagram**\n\n"
                 f"Error: {str(e)}\n\n"
                 f"Please try again with a different transcript.",
+                parse_mode="Markdown",
+            )
+        finally:
+            # Cleanup all temporary files
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                        logger.debug(f"Cleaned up temp file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
+
+    async def handle_transcript_question(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle questions about transcript files when user replies to a transcript."""
+        user_id = update.effective_user.id
+        question = update.message.text
+        
+        # Check if this is a reply to a message
+        if not update.message.reply_to_message:
+            return  # This handler should only be called for replies
+            
+        replied_message = update.message.reply_to_message
+        
+        # Check if the replied message has a document
+        if not replied_message.document:
+            return  # Not a document reply
+            
+        # Check if it's a transcript file (by filename pattern)
+        file_name = replied_message.document.file_name
+        if not file_name or not file_name.startswith("transcript_") or not file_name.endswith(".txt"):
+            return  # Not a transcript file
+            
+        logger.info(f"User {user_id} asked question about transcript: {question[:100]}")
+        
+        # Send processing message
+        processing_msg = await update.message.reply_text(
+            f"🤔 **Analyzing transcript to answer your question...**\n\n"
+            f"❓ Question: {question[:200]}{'...' if len(question) > 200 else ''}\n\n"
+            f"🔄 Processing...",
+            parse_mode="Markdown",
+        )
+        
+        temp_files_to_cleanup = []
+        
+        try:
+            # Download the transcript file
+            transcript_file = await replied_message.document.get_file()
+            
+            # Create a temporary file to store the transcript
+            with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as temp_file:
+                temp_file_path = temp_file.name
+                
+            temp_files_to_cleanup.append(temp_file_path)
+            
+            # Download the transcript content
+            await transcript_file.download_to_drive(temp_file_path)
+            
+            # Read the transcript content
+            transcript_content = await self.question_answering_service.read_transcript_file(temp_file_path)
+            
+            if not transcript_content:
+                await processing_msg.edit_text(
+                    "❌ **Could not read transcript file**\n\n"
+                    "The transcript file appears to be empty or corrupted. Please try with a different file.",
+                    parse_mode="Markdown",
+                )
+                return
+            
+            # Update processing message
+            await processing_msg.edit_text(
+                f"🤔 **Analyzing transcript to answer your question...**\n\n"
+                f"❓ Question: {question[:200]}{'...' if len(question) > 200 else ''}\n\n"
+                f"🧠 Generating answer with Claude Sonnet 4...",
+                parse_mode="Markdown",
+            )
+            
+            # Get answer from Claude Sonnet 4
+            answer = await self.question_answering_service.answer_question_about_transcript(
+                transcript_content, question
+            )
+            
+            if not answer:
+                await processing_msg.edit_text(
+                    "❌ **Could not generate answer**\n\n"
+                    "Sorry, I couldn't process your question about the transcript. This might be due to:\n"
+                    "• AI model unavailability\n"
+                    "• Complex question\n"
+                    "• Technical issues\n\n"
+                    "Please try rephrasing your question or try again later.",
+                    parse_mode="Markdown",
+                )
+                return
+            
+            # Prepare the answer message
+            answer_message = f"🤖 **Answer about transcript:**\n\n"
+            answer_message += f"❓ **Question:** {question}\n\n"
+            answer_message += f"💡 **Answer:**\n{answer}"
+            
+            # Send the answer, splitting if too long
+            if len(answer_message) <= 4096:
+                try:
+                    await processing_msg.edit_text(
+                        answer_message,
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send answer with Markdown, trying without formatting: {e}")
+                    # Fallback to plain text if markdown fails
+                    await processing_msg.edit_text(answer_message)
+            else:
+                # Split long answers
+                chunks = self._split_message(answer_message, 4000)
+                
+                # Edit the first message
+                try:
+                    await processing_msg.edit_text(
+                        chunks[0],
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send first chunk with Markdown: {e}")
+                    await processing_msg.edit_text(chunks[0])
+                
+                # Send remaining chunks as new messages
+                for i, chunk in enumerate(chunks[1:], 2):
+                    try:
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text=f"🤖 **Answer (Part {i}):**\n\n{chunk}",
+                            parse_mode="Markdown",
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to send chunk {i} with Markdown: {e}")
+                        await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text=f"🤖 Answer (Part {i}):\n\n{chunk}",
+                        )
+            
+            logger.info(f"Successfully answered question for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error answering transcript question for user {user_id}: {e}", exc_info=True)
+            await processing_msg.edit_text(
+                f"❌ **Error processing your question**\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Please try again or rephrase your question.",
                 parse_mode="Markdown",
             )
         finally:
@@ -542,15 +699,26 @@ Just send me a file and I'll handle the rest! 🚀
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
 
-    async def handle_unsupported_message(
+    async def handle_text_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle unsupported message types."""
-        await update.message.reply_text(
-            "📎 Please send me a video or audio file to transcribe!\n\n"
-            "Use /help to see supported formats and usage instructions.",
-            parse_mode="Markdown",
-        )
+        """Handle text messages - check if it's a transcript question first."""
+        # Check if this is a reply to a transcript file
+        if (update.message.reply_to_message and 
+            update.message.reply_to_message.document and
+            update.message.reply_to_message.document.file_name and
+            update.message.reply_to_message.document.file_name.startswith("transcript_") and
+            update.message.reply_to_message.document.file_name.endswith(".txt")):
+            # This is a question about a transcript
+            await self.handle_transcript_question(update, context)
+        else:
+            # Regular unsupported message
+            await update.message.reply_text(
+                "📎 Please send me a video or audio file to transcribe!\n\n"
+                "💡 **New feature:** You can also reply to any transcript file with a question and I'll answer it using Claude Sonnet 4!\n\n"
+                "Use /help to see supported formats and usage instructions.",
+                parse_mode="Markdown",
+            )
 
     def _is_supported_file_type(self, filename: str | None) -> bool:
         """Check if the file type is supported."""
@@ -639,10 +807,10 @@ Just send me a file and I'll handle the rest! 🚀
         application.add_handler(MessageHandler(filters.VOICE, self.handle_file))
         application.add_handler(MessageHandler(filters.VIDEO_NOTE, self.handle_file))
 
-        # Handle other message types
+        # Handle text messages (including transcript questions)
         application.add_handler(
             MessageHandler(
-                filters.TEXT & ~filters.COMMAND, self.handle_unsupported_message
+                filters.TEXT & ~filters.COMMAND, self.handle_text_message
             )
         )
 

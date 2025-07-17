@@ -2,7 +2,8 @@
 
 import json
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
+from collections import Counter
 
 from loguru import logger
 
@@ -16,6 +17,58 @@ class SpeakerIdentificationService:
         """Initialize the speaker identification service."""
         self.ai_model = ai_model or create_ai_model()
 
+    def _disambiguate_speaker_names(self, speaker_names: Dict[str, str]) -> Dict[str, str]:
+        """
+        Disambiguate speaker names by adding suffixes when multiple speakers have the same name.
+        
+        Args:
+            speaker_names: Original mapping of speaker IDs to names
+            
+        Returns:
+            Updated mapping with disambiguated names
+        """
+        if not speaker_names:
+            return speaker_names
+            
+        # Count occurrences of each name
+        name_counts = Counter(speaker_names.values())
+        
+        # Find names that appear more than once
+        duplicate_names = {name for name, count in name_counts.items() if count > 1}
+        
+        if not duplicate_names:
+            # No duplicates, return original
+            return speaker_names
+            
+        logger.info(f"Found duplicate names that need disambiguation: {duplicate_names}")
+        
+        # Create disambiguated names
+        disambiguated_names = {}
+        name_counters = {}
+        
+        for speaker_id, name in speaker_names.items():
+            if name in duplicate_names:
+                # This name appears multiple times, add a suffix
+                if name not in name_counters:
+                    name_counters[name] = 1
+                else:
+                    name_counters[name] += 1
+                
+                if name_counters[name] == 1:
+                    # First occurrence gets " (1)" suffix
+                    disambiguated_name = f"{name} (1)"
+                else:
+                    # Subsequent occurrences get increasing numbers
+                    disambiguated_name = f"{name} ({name_counters[name]})"
+                
+                disambiguated_names[speaker_id] = disambiguated_name
+                logger.info(f"Speaker {speaker_id}: '{name}' -> '{disambiguated_name}'")
+            else:
+                # Name is unique, keep as is
+                disambiguated_names[speaker_id] = name
+                
+        return disambiguated_names
+
     async def identify_speakers(self, transcript: str) -> Dict[str, str] | None:
         """
         Identify speaker names from the transcript using AI.
@@ -25,7 +78,7 @@ class SpeakerIdentificationService:
 
         Returns:
             Dictionary mapping speaker numbers to names (e.g., {"0": "Alexander", "1": "Alexey"})
-            or None if identification failed
+            or None if identification failed. Names are automatically disambiguated if duplicates exist.
         """
         try:
             # Check if transcript has speaker labels
@@ -47,6 +100,7 @@ Rules:
 - If a name is mentioned but you're not sure which speaker it belongs to, don't include it
 - If no names can be identified, return an empty JSON object: {{}}
 - Return ONLY the JSON object, no other text or explanation
+- If multiple speakers have the same name, still map them to the same name - the system will handle disambiguation automatically
 
 Example output format:
 {{
@@ -82,8 +136,11 @@ Transcript:
                             if isinstance(speaker_id, (str, int)) and isinstance(name, str):
                                 validated_names[str(speaker_id)] = name.strip()
                         
-                        logger.info(f"Successfully identified {len(validated_names)} speakers: {validated_names}")
-                        return validated_names
+                        # Disambiguate names if there are duplicates
+                        disambiguated_names = self._disambiguate_speaker_names(validated_names)
+                        
+                        logger.info(f"Successfully identified {len(disambiguated_names)} speakers: {disambiguated_names}")
+                        return disambiguated_names
                     
                 else:
                     logger.warning("No JSON object found in AI response")
@@ -104,7 +161,7 @@ Transcript:
 
         Args:
             transcript: The original transcript with Speaker 0, Speaker 1, etc.
-            speaker_names: Dictionary mapping speaker numbers to names
+            speaker_names: Dictionary mapping speaker numbers to names (may include disambiguated names)
 
         Returns:
             Updated transcript with actual speaker names
@@ -128,6 +185,7 @@ Transcript:
     async def process_transcript_with_speaker_names(self, transcript: str) -> str:
         """
         Complete pipeline: identify speakers and replace labels in transcript.
+        Automatically handles name disambiguation for speakers with the same name.
 
         Args:
             transcript: The original transcript with generic speaker labels
@@ -147,7 +205,7 @@ Transcript:
                 logger.info("No speakers identified, returning original transcript")
                 return transcript
             
-            # Replace the labels with actual names
+            # Replace the labels with actual names (already disambiguated)
             updated_transcript = self.replace_speaker_labels(transcript, speaker_names)
             
             logger.info(f"Successfully processed transcript with {len(speaker_names)} identified speakers")

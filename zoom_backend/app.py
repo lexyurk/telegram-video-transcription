@@ -238,11 +238,15 @@ async def process_recording(
             return r.json()
 
     async def download_audio(download_url: str, token: str) -> str:
-        dl = f"{download_url}?access_token={token}"
         import tempfile, pathlib
 
         async with httpx.AsyncClient(timeout=None) as c:
-            r = await c.get(dl)
+            # Prefer Authorization header (works with OAuth and download_access_token)
+            r = await c.get(download_url, headers={"Authorization": f"Bearer {token}"})
+            if r.status_code == 401:
+                # Fallback to query param for short-lived tokens
+                dl = f"{download_url}{'&' if '?' in download_url else '?'}access_token={token}"
+                r = await c.get(dl)
             r.raise_for_status()
             fd, path = tempfile.mkstemp(suffix=".m4a")
             pathlib.Path(path).write_bytes(r.content)

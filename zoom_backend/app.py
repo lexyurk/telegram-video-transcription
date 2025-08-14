@@ -44,8 +44,8 @@ async def startup_event() -> None:
     ensure_db(settings.zoom_db_path)
 
 
-@app.get("/zoom/connect")
-async def zoom_connect(telegram_chat_id: int, telegram_user_id: int, redirect: bool = False) -> Dict[str, str] | RedirectResponse:
+@app.get("/zoom/connect", response_model=None)
+async def zoom_connect(telegram_chat_id: int, telegram_user_id: int, redirect: bool = False):
     settings = get_settings()
     if not (settings.zoom_client_id and settings.zoom_redirect and settings.state_secret):
         raise HTTPException(status_code=500, detail="Zoom not configured")

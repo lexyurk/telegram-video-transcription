@@ -126,8 +126,9 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
     # CRC validation
     if body.get("event") == "endpoint.url_validation":
         plain = body["payload"]["plainToken"]
-        enc = hmac.new(settings.zoom_webhook_secret.encode(), plain.encode(), hashlib.sha256).hexdigest()
-        return JSONResponse({"plainToken": plain, "encryptedToken": enc})
+        digest = hmac.new(settings.zoom_webhook_secret.encode(), plain.encode(), hashlib.sha256).digest()
+        enc_b64 = base64.b64encode(digest).decode()
+        return JSONResponse({"plainToken": plain, "encryptedToken": enc_b64})
 
     if not verify_signature(request.headers, raw, settings.zoom_webhook_secret):
         raise HTTPException(status_code=401, detail="bad signature")

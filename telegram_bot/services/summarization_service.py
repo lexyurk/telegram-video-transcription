@@ -27,20 +27,17 @@ class SummarizationService:
         """
         import re
         
-        # Remove speaker labels like "Speaker 0:", "Серафима:", etc.
-        # This pattern matches:
-        # - "Speaker X:" (English)
-        # - "Спикер X:" (Russian) 
-        # - Any name followed by ":"
+        # Only remove generic diarization labels like "Speaker 0:" or "Спикер 1:"
+        # Preserve real name labels (e.g., "Alexey:") so ownership can be inferred.
         lines = text.split('\n')
         cleaned_lines = []
-        
+
         for line in lines:
-            # Remove speaker labels at the beginning of lines
-            cleaned_line = re.sub(r'^[^:]+:\s*', '', line.strip())
+            # Remove only generic speaker labels
+            cleaned_line = re.sub(r'^(?:Speaker|Спикер)\s*\d+\s*:\s*', '', line.strip())
             if cleaned_line:  # Only add non-empty lines
                 cleaned_lines.append(cleaned_line)
-        
+
         return ' '.join(cleaned_lines)
 
     def _sanitize_markdown(self, text: str) -> str:
@@ -92,7 +89,7 @@ class SummarizationService:
             clean_transcript = self._remove_speaker_labels(transcript)
             logger.info(f"Removed speaker labels for summarization. Original: {len(transcript)} chars, Clean: {len(clean_transcript)} chars")
 
-            # Improved prompt for cleaner markdown output
+            # Improved prompt for cleaner markdown output and explicit AI task capture
             prompt = f"""Analyze this meeting transcript and create a focused summary with actionable insights.
 
 LANGUAGE: Respond in the same language as the transcript.
@@ -101,7 +98,10 @@ FORMATTING: Use simple markdown - **bold** for headers, - for bullet points. Kee
 
 Structure your response as:
 
-**Key Decisions & Insights**
+**Executive Summary**
+- 1-3 sentences summarizing outcomes and significance
+
+**Key Points**
 - What decisions were made and why
 - Important insights or discoveries
 - Problems identified and solutions proposed
@@ -110,6 +110,11 @@ Structure your response as:
 - [Person/Role] will [specific action] by [timeframe if mentioned]
 - Include who is responsible for each action
 - Prioritize urgent items first
+
+**Tasks for AI (if any)**
+- Detect phrases that explicitly assign a "task for AI" (e.g., "task for artificial intelligence", "задача для ИИ").
+- Extract the task as a concrete, actionable item.
+- Assign to the speaker who said it unless a specific assignee is named; if named, use that person.
 
 **Next Steps**
 - Immediate follow-ups needed
@@ -122,8 +127,11 @@ Focus on:
 - Key insights that drive the actions
 - Skip routine updates unless they impact decisions
 
-Transcript:
-{clean_transcript}"""
+Transcript (cleaned):
+{clean_transcript}
+
+Original transcript (with labels) for reference:
+{transcript}"""
 
             summary = await self.ai_model.generate_text(prompt)
             

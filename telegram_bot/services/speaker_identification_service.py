@@ -82,17 +82,20 @@ class SpeakerIdentificationService:
         """
         try:
             # Check if transcript has speaker labels
-            if "Speaker " not in transcript:
+            if "Speaker " not in transcript and "Спикер " not in transcript:
                 logger.info("No speaker labels found in transcript")
                 return {}
+
+            explicit_names = self._extract_explicit_self_introductions(transcript)
 
             prompt = f"""
 Please analyze the following transcript and identify the names of the speakers.
 
 The transcript uses labels like "Speaker 0:", "Speaker 1:", etc. Your task is to:
 1. Listen carefully to how speakers address each other or introduce themselves
-2. Identify the actual names of each speaker
-3. Return ONLY a JSON object mapping speaker numbers to names
+2. Identify explicit self-introductions (e.g., variants of "for artificial intelligence, my name is <X>", "для ИИ меня зовут <X>", "for the record, I'm <X>") and map them to the correct "Speaker N" who said it
+3. Identify the actual names of each speaker
+4. Return ONLY a JSON object mapping speaker numbers to names
 
 Rules:
 - Only include speakers whose names you can confidently identify from the conversation
@@ -102,7 +105,10 @@ Rules:
 - Return ONLY the JSON object, no other text or explanation
 - If multiple speakers have the same name, still map them to the same name - the system will handle disambiguation automatically
 
-Example output format:
+Known explicit self-introductions (use these as authoritative hints when present):
+{json.dumps(explicit_names, ensure_ascii=False)}
+
+ Example output format:
 {{
   "0": "Alexander",
   "1": "Alexey",
@@ -136,8 +142,16 @@ Transcript:
                             if isinstance(speaker_id, (str, int)) and isinstance(name, str):
                                 validated_names[str(speaker_id)] = name.strip()
                         
+                        # Merge AI-detected names with explicit introductions (explicit wins on conflict)
+                        merged = dict(validated_names)
+                        try:
+                            if 'explicit_names' in locals() and explicit_names:
+                                merged.update({k: v for k, v in explicit_names.items() if v})
+                        except Exception:
+                            pass
+                        
                         # Disambiguate names if there are duplicates
-                        disambiguated_names = self._disambiguate_speaker_names(validated_names)
+                        disambiguated_names = self._disambiguate_speaker_names(merged)
                         
                         logger.info(f"Successfully identified {len(disambiguated_names)} speakers: {disambiguated_names}")
                         return disambiguated_names
@@ -154,6 +168,41 @@ Transcript:
         except Exception as e:
             logger.error(f"Error identifying speakers: {e}")
             return None
+
+    def _extract_explicit_self_introductions(self, transcript: str) -> Dict[str, str]:
+        """
+        Extract names from explicit self-introduction phrases tied to specific speakers.
+
+        Supports phrases like:
+        - "for artificial intelligence, my name is <Name>"
+        - "for the record, my name is <Name>"
+        - "для ИИ меня зовут <Имя>" / "для искусственного интеллекта меня зовут <Имя>"
+
+        Returns a mapping of speaker number to detected name.
+        """
+        names: Dict[str, str] = {}
+        line_pattern = re.compile(r"^(?:Speaker|Спикер)\s*(\d+)\s*:\s*(.*)$", re.IGNORECASE)
+        patterns = [
+            re.compile(r"(?:for\s+(?:artificial\s+intelligence|ai)|for\s+the\s+record)[^\w]{0,10}.*?my\s+name\s+is\s+([A-Za-zА-Яа-яЁё\-\s]{2,60})", re.IGNORECASE),
+            re.compile(r"для\s+(?:искусственного\s+интеллекта|ии)[^\w]{0,10}.*?меня\s+зовут\s+([A-Za-zА-Яа-яЁё\-\s]{2,60})", re.IGNORECASE),
+        ]
+        for raw_line in transcript.split('\n'):
+            line = raw_line.strip()
+            m = line_pattern.match(line)
+            if not m:
+                continue
+            speaker_id, content = m.group(1), m.group(2)
+            for pat in patterns:
+                nm = pat.search(content)
+                if nm:
+                    name = nm.group(1).strip().strip('\"'"'"'«».,!?:;')
+                    name = re.sub(r"\s+", " ", name)
+                    if name:
+                        names[str(speaker_id)] = name
+                        break
+        if names:
+            logger.info(f"Explicit self-introductions detected: {names}")
+        return names
 
     def replace_speaker_labels(self, transcript: str, speaker_names: Dict[str, str]) -> str:
         """
@@ -173,10 +222,10 @@ Transcript:
         
         # Replace each speaker label with the actual name
         for speaker_id, name in speaker_names.items():
-            # Replace "Speaker X:" with "Name:"
-            pattern = f"Speaker {speaker_id}:"
+            # Replace English and Russian diarization labels
             replacement = f"{name}:"
-            updated_transcript = updated_transcript.replace(pattern, replacement)
+            updated_transcript = updated_transcript.replace(f"Speaker {speaker_id}:", replacement)
+            updated_transcript = updated_transcript.replace(f"Спикер {speaker_id}:", replacement)
             
             logger.info(f"Replaced 'Speaker {speaker_id}:' with '{name}:'")
 

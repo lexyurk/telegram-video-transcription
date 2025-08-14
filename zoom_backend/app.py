@@ -11,6 +11,7 @@ import httpx
 import jwt
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, PlainTextResponse
+from loguru import logger
 
 from telegram_bot.config import get_settings
 from telegram_bot.services.transcription_service import TranscriptionService
@@ -118,6 +119,14 @@ def verify_signature(headers: Dict[str, str], raw_body: bytes, secret: str, tole
 async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
     settings = get_settings()
     raw = await request.body()
+    # Log key request details (no secrets)
+    logger.info(
+        "Zoom webhook POST: ua={}, ts={}, sig={}, content_length={}",
+        request.headers.get("user-agent"),
+        request.headers.get("x-zm-request-timestamp"),
+        (request.headers.get("x-zm-signature") or "")[:16] + "...",
+        request.headers.get("content-length"),
+    )
     try:
         body = json.loads(raw.decode())
     except Exception:
@@ -126,9 +135,14 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
     # CRC validation
     if body.get("event") == "endpoint.url_validation":
         plain = body["payload"]["plainToken"]
-        digest = hmac.new(settings.zoom_webhook_secret.encode(), plain.encode(), hashlib.sha256).digest()
-        enc_b64 = base64.b64encode(digest).decode()
-        return JSONResponse({"plainToken": plain, "encryptedToken": enc_b64})
+        enc_hex = hmac.new(
+            settings.zoom_webhook_secret.encode(), plain.encode(), hashlib.sha256
+        ).hexdigest()
+        logger.info(
+            "CRC handled (hex): plainToken_len={}, encryptedToken_prefix={}...",
+            len(plain), enc_hex[:12]
+        )
+        return JSONResponse({"plainToken": plain, "encryptedToken": enc_hex})
 
     if not verify_signature(request.headers, raw, settings.zoom_webhook_secret):
         raise HTTPException(status_code=401, detail="bad signature")
@@ -138,6 +152,7 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
         obj = body["payload"]["object"]
         zoom_user_id = obj["host_id"]
         meeting_uuid = obj["uuid"]
+        logger.info("recording.completed: host_id={}, uuid_prefix={}...", zoom_user_id, str(meeting_uuid)[:10])
 
         # Look up chat_id
         with get_conn(settings.zoom_db_path) as conn:
@@ -334,6 +349,7 @@ async def status() -> Dict[str, Any]:
 @app.get("/webhooks/zoom")
 async def zoom_webhook_get() -> JSONResponse:
     # Some validators probe with GET
+    logger.info("Zoom webhook GET probe received")
     return JSONResponse({"ok": True})
 
 

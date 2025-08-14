@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, List
 import httpx
 import jwt
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from loguru import logger
 
 from telegram_bot.config import get_settings
@@ -45,7 +45,7 @@ async def startup_event() -> None:
 
 
 @app.get("/zoom/connect")
-async def zoom_connect(telegram_chat_id: int, telegram_user_id: int) -> Dict[str, str]:
+async def zoom_connect(telegram_chat_id: int, telegram_user_id: int, redirect: bool = False) -> Dict[str, str] | RedirectResponse:
     settings = get_settings()
     if not (settings.zoom_client_id and settings.zoom_redirect and settings.state_secret):
         raise HTTPException(status_code=500, detail="Zoom not configured")
@@ -62,6 +62,8 @@ async def zoom_connect(telegram_chat_id: int, telegram_user_id: int) -> Dict[str
         "state": state,
     }
     url = f"https://zoom.us/oauth/authorize?{urllib.parse.urlencode(params)}"
+    if redirect:
+        return RedirectResponse(url=url, status_code=307)
     return {"authorize_url": url}
 
 

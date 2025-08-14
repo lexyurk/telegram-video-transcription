@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 
 from loguru import logger
-from telegram import Document, Update
+from telegram import Document, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -109,8 +109,16 @@ Just send me a file and I'll handle the rest! 🚀
             )
             return
         import urllib.parse
-        url = f"{base.rstrip('/')}/zoom/connect?telegram_chat_id={update.effective_chat.id}&telegram_user_id={update.effective_user.id}"
-        await update.message.reply_text(f"🔗 Connect your Zoom account:\n{url}")
+        url = (
+            f"{base.rstrip('/')}/zoom/connect?telegram_chat_id={update.effective_chat.id}"
+            f"&telegram_user_id={update.effective_user.id}&redirect=true"
+        )
+        keyboard = [[InlineKeyboardButton(text="Connect Zoom", url=url)]]
+        await update.message.reply_text(
+            "🔗 Connect your Zoom account:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True,
+        )
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Check Zoom connection status (best-effort)."""

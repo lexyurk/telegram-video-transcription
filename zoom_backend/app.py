@@ -181,13 +181,28 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
             return JSONResponse({"ok": True})
 
         # Enqueue background processing to respond fast to Zoom
-        background_tasks.add_task(process_recording, meeting_uuid, zoom_user_id, int(chat_id))
+        background_tasks.add_task(
+            process_recording,
+            meeting_uuid,
+            zoom_user_id,
+            int(chat_id),
+            obj.get("recording_files", []),
+            obj.get("topic"),
+            obj.get("start_time"),
+        )
         return JSONResponse({"ok": True})
 
     return JSONResponse({"ok": True})
 
 
-async def process_recording(meeting_uuid: str, zoom_user_id: str, chat_id: int) -> None:
+async def process_recording(
+    meeting_uuid: str,
+    zoom_user_id: str,
+    chat_id: int,
+    recording_files_from_event: Optional[list] = None,
+    topic: Optional[str] = None,
+    start_time: Optional[str] = None,
+) -> None:
     settings = get_settings()
     # get fresh tokens (no refresh implemented yet)
     with get_conn(settings.zoom_db_path) as conn:
@@ -233,9 +248,27 @@ async def process_recording(meeting_uuid: str, zoom_user_id: str, chat_id: int) 
             pathlib.Path(path).write_bytes(r.content)
             return path
 
-    data = await fetch_recording_files(access_token, meeting_uuid)
-    files = data.get("recording_files", [])
+    data: Dict[str, Any] = {}
+    files: list = []
+    # Try up to 2 attempts; fallback to webhook payload if API errors
+    for attempt in range(2):
+        try:
+            data = await fetch_recording_files(access_token, meeting_uuid)
+            files = data.get("recording_files", [])
+            break
+        except httpx.HTTPStatusError as e:
+            # Log response text for diagnostics
+            err_text = e.response.text if e.response is not None else str(e)
+            logger.error("fetch_recording_files failed (attempt {}): status={} body={}", attempt + 1, getattr(e.response, "status_code", "?"), err_text)
+            if recording_files_from_event:
+                files = recording_files_from_event
+                data = {"topic": topic or "", "start_time": start_time or ""}
+                break
+            # brief backoff before retry
+            await asyncio.sleep(5)
+
     if not files:
+        logger.error("No recording files found for meeting {}", meeting_uuid)
         return
     audio = next((f for f in files if f.get("recording_type") == "audio_only"), None) or files[0]
     token = data.get("download_access_token") or access_token

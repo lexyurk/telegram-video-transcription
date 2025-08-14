@@ -330,3 +330,9 @@ async def status() -> Dict[str, Any]:
     return {"ok": True}
 
 
+@app.get("/webhooks/zoom")
+async def zoom_webhook_get() -> JSONResponse:
+    # Some validators probe with GET
+    return JSONResponse({"ok": True})
+
+

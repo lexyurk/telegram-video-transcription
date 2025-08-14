@@ -178,7 +178,7 @@ The bot includes an intelligent speaker identification system:
    ```
 
 3. **Configure Nginx for your domain**:
-   - Copy `scripts/nginx-zoom-backend.conf` to `./temp/nginx/api.conf`
+   - Create config file at `./temp/nginx/api.conf` (copy from `scripts/nginx-zoom-backend.conf`)
    - Edit `server_name` to your domain (e.g., `api.yourapp.com`)
    - The reverse-proxy container loads configs from `./temp/nginx`
 
@@ -191,7 +191,7 @@ The bot includes an intelligent speaker identification system:
      -v $(pwd)/temp/www:/var/www/certbot \
      certbot/certbot certonly --webroot -w /var/www/certbot -d $DOMAIN --agree-tos -m you@example.com --non-interactive
    ```
-   - After success, reload Nginx inside the container if you add ssl server block
+   - After success, add SSL config at `./temp/nginx/api-ssl.conf` (copy from `scripts/nginx-zoom-backend-ssl.conf`) and restart reverse proxy
 
 3. **View logs**:
    ```bash

@@ -8,6 +8,41 @@ services:
     volumes:
       - ./temp:/app/temp
     restart: unless-stopped
-    
-    # Remove healthcheck since we don't have a health endpoint
-    # The bot will log its status instead 
+    command: ["uv", "run", "python", "main.py"]
+
+  zoom-backend:
+    build: .
+    platform: linux/amd64
+    container_name: zoom-backend
+    env_file:
+      - .env
+    volumes:
+      - ./temp:/app/temp
+    ports:
+      - "8080:8080"
+    command: ["uv", "run", "uvicorn", "zoom_backend.app:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+    restart: unless-stopped
+
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: reverse-proxy
+    depends_on:
+      - zoom-backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./temp/nginx:/etc/nginx/conf.d
+      - ./temp/certs:/etc/letsencrypt
+      - ./temp/www:/var/www/certbot
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./temp/certs:/etc/letsencrypt
+      - ./temp/www:/var/www/certbot
+    entrypoint: ["/bin/sh", "-c"]
+    # Use manual run commands provided below to issue certs
+    command: "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --webroot -w /var/www/certbot; done"

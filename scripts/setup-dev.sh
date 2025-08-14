@@ -15,16 +15,28 @@ fi
 echo "📦 Installing dependencies..."
 uv sync --dev
 
-# Create .env file if it doesn't exist
+# Ensure .env has Zoom backend variables
 if [ ! -f .env ]; then
-    echo "📝 Creating .env file from template..."
-    cp .env.example .env
-    echo "⚠️  Please edit .env file and add your API keys:"
-    echo "   - TELEGRAM_BOT_TOKEN"
-    echo "   - DEEPGRAM_API_KEY"
-    echo "   - ANTHROPIC_API_KEY"
+    echo "📝 Creating .env file with required variables..."
+    cat > .env <<'EOF'
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_API_ID=
+TELEGRAM_API_HASH=
+DEEPGRAM_API_KEY=
+GOOGLE_API_KEY=
+ANTHROPIC_API_KEY=
+
+# Zoom integration
+ZOOM_CLIENT_ID=
+ZOOM_CLIENT_SECRET=
+ZOOM_REDIRECT=https://api.yourapp.com/zoom/callback
+ZOOM_WEBHOOK_SECRET=
+STATE_SECRET=
+BACKEND_BASE_URL=https://api.yourapp.com
+ZOOM_DB_PATH=./temp/zoom_integration.sqlite3
+EOF
 else
-    echo "✅ .env file already exists"
+    echo "✅ .env file already exists — ensure Zoom vars are present (ZOOM_CLIENT_ID, etc.)"
 fi
 
 # Create temp directory

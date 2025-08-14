@@ -1,0 +1,18 @@
+[Unit]
+Description=Zoom Integration Backend (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/transcribiscie
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/env bash -lc 'cd /opt/transcribiscie && uv run uvicorn zoom_backend.app:app --host 0.0.0.0 --port 8080 --proxy-headers'
+Restart=always
+RestartSec=3
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
+
+

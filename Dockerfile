@@ -28,6 +28,7 @@ COPY pyproject.toml ./
 COPY uv.lock ./
 COPY README.md ./
 COPY telegram_bot/ ./telegram_bot/
+COPY zoom_backend/ ./zoom_backend/
 COPY main.py ./
 
 # Install Python dependencies
@@ -45,8 +46,8 @@ RUN chown -R app:app /app
 # Switch to app user
 USER app
 
-# Expose port (if needed for health checks)
-EXPOSE 8000
+# Expose common ports (bot doesn't need exposure; backend uses 8080 behind proxy)
+EXPOSE 8080
 
 # Run the bot
 CMD ["uv", "run", "python", "main.py"] 

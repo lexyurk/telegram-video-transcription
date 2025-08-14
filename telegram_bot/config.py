@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     enable_streaming: bool = Field(default=True, alias="ENABLE_STREAMING")
     memory_limit_mb: int = Field(default=512, alias="MEMORY_LIMIT_MB")
 
+    # Zoom integration
+    zoom_client_id: str = Field(default="", alias="ZOOM_CLIENT_ID")
+    zoom_client_secret: str = Field(default="", alias="ZOOM_CLIENT_SECRET")
+    zoom_redirect: str = Field(default="", alias="ZOOM_REDIRECT")
+    zoom_webhook_secret: str = Field(default="", alias="ZOOM_WEBHOOK_SECRET")
+    state_secret: str = Field(default="", alias="STATE_SECRET")
+    backend_base_url: str = Field(default="", alias="BACKEND_BASE_URL")
+    zoom_db_path: str = Field(default="./temp/zoom_integration.sqlite3", alias="ZOOM_DB_PATH")
+
 
 def get_settings() -> Settings:
     """Get settings instance."""

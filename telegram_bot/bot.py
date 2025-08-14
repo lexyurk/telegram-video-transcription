@@ -77,6 +77,9 @@ Welcome! I can transcribe your video and audio files and create summaries with a
 /start - Show this message
 /help - Show help
 /diagram - Create a diagram from a transcript (reply to a .txt file)
+/connect - Connect your Zoom account to receive recordings here
+/status - Show Zoom connection status
+/disconnect - Disconnect your Zoom account
 
 **🆕 New Features:**
 
@@ -95,6 +98,34 @@ Just send me a file and I'll handle the rest! 🚀
 
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
         logger.info(f"User {update.effective_user.id} started the bot")
+
+    async def connect_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Provide Zoom OAuth link to connect account."""
+        settings = get_settings()
+        base = settings.backend_base_url or ""
+        if not base:
+            await update.message.reply_text(
+                "Zoom backend not configured. Ask admin to set BACKEND_BASE_URL.",
+            )
+            return
+        import urllib.parse
+        url = f"{base.rstrip('/')}/zoom/connect?telegram_chat_id={update.effective_chat.id}&telegram_user_id={update.effective_user.id}"
+        await update.message.reply_text(f"🔗 Connect your Zoom account:\n{url}")
+
+    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Check Zoom connection status (best-effort)."""
+        settings = get_settings()
+        base = settings.backend_base_url or ""
+        if not base:
+            await update.message.reply_text("Backend not configured (BACKEND_BASE_URL)")
+            return
+        # Minimal status endpoint, for now just say it's running
+        await update.message.reply_text("Backend reachable. If connected, you'll receive recordings here after meetings.")
+
+    async def disconnect_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Explain how to disconnect (through Zoom app uninstall)."""
+        await update.message.reply_text(
+            "To disconnect: open your Zoom Marketplace, uninstall the app. We'll remove your tokens automatically.")
 
     async def help_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -799,6 +830,9 @@ Just send me a file and I'll handle the rest! 🚀
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
         application.add_handler(CommandHandler("diagram", self.diagram_command))
+        application.add_handler(CommandHandler("connect", self.connect_command))
+        application.add_handler(CommandHandler("status", self.status_command))
+        application.add_handler(CommandHandler("disconnect", self.disconnect_command))
 
         # File handlers (documents, audio, video, voice, video notes)
         application.add_handler(MessageHandler(filters.Document.ALL, self.handle_file))

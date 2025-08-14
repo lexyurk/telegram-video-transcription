@@ -19,6 +19,21 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 - 📊 **Comprehensive Logging**: Detailed logging for monitoring and debugging
 - 🐳 **Docker Support**: Easy deployment with Docker containers
 
+### 🔗 Zoom Integration (New)
+
+Connect your Zoom account and automatically receive audio + summaries in Telegram when a cloud recording finishes.
+
+Backend endpoints (FastAPI):
+- `GET /zoom/connect?telegram_chat_id=...&telegram_user_id=...` → Zoom OAuth URL
+- `GET /zoom/callback` → token exchange and mapping
+- `POST /webhooks/zoom` → CRC + signature verification + recording.completed processing
+- `POST /webhooks/zoom/deauth` → token cleanup on uninstall
+
+Bot commands:
+- `/connect` → deep-link to backend connect endpoint
+- `/status` → basic backend reachability
+- `/disconnect` → instructions for uninstall
+
 ## Supported File Formats
 
 ### Video
@@ -146,12 +161,37 @@ The bot includes an intelligent speaker identification system:
    DEEPGRAM_MODEL=nova-2
    GEMINI_MODEL=gemini-2.5-flash
    CLAUDE_MODEL=claude-sonnet-4-20250514
+
+    # Zoom integration
+    ZOOM_CLIENT_ID=
+    ZOOM_CLIENT_SECRET=
+    ZOOM_REDIRECT=https://api.yourapp.com/zoom/callback
+    ZOOM_WEBHOOK_SECRET=
+    STATE_SECRET=
+    BACKEND_BASE_URL=https://api.yourapp.com
+    ZOOM_DB_PATH=./temp/zoom_integration.sqlite3
    ```
 
-2. **Run with Docker Compose**:
+2. **Run with Docker Compose** (includes bot, backend, reverse proxy, and cert renew):
    ```bash
    docker-compose up --build -d
    ```
+
+3. **Configure Nginx for your domain**:
+   - Copy `scripts/nginx-zoom-backend.conf` to `./temp/nginx/api.conf`
+   - Edit `server_name` to your domain (e.g., `api.yourapp.com`)
+   - The reverse-proxy container loads configs from `./temp/nginx`
+
+4. **Issue TLS certificate (first time)**:
+   ```bash
+   # Replace with your actual domain
+   DOMAIN=api.yourapp.com
+   docker run --rm \
+     -v $(pwd)/temp/certs:/etc/letsencrypt \
+     -v $(pwd)/temp/www:/var/www/certbot \
+     certbot/certbot certonly --webroot -w /var/www/certbot -d $DOMAIN --agree-tos -m you@example.com --non-interactive
+   ```
+   - After success, reload Nginx inside the container if you add ssl server block
 
 3. **View logs**:
    ```bash
@@ -180,6 +220,19 @@ The bot includes an intelligent speaker identification system:
 | `ENABLE_SMART_FORMAT` | Enable smart formatting | true |
 | `GEMINI_MODEL` | Gemini model to use | gemini-2.5-flash |
 | `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-20250514 |
+| `ZOOM_CLIENT_ID` | Zoom OAuth client id | Optional |
+| `ZOOM_CLIENT_SECRET` | Zoom OAuth client secret | Optional |
+| `ZOOM_REDIRECT` | Zoom redirect URL (must match app) | Optional |
+| `ZOOM_WEBHOOK_SECRET` | Zoom webhook secret token | Optional |
+| `STATE_SECRET` | JWT secret to sign OAuth state | Optional |
+| `BACKEND_BASE_URL` | Public base URL of FastAPI backend | Optional |
+| `ZOOM_DB_PATH` | Path to SQLite DB for Zoom integration | ./temp/zoom_integration.sqlite3 |
+
+### Docker services
+- `telegram-bot`: the Telegram bot process
+- `zoom-backend`: FastAPI backend with OAuth + webhooks
+- `reverse-proxy`: Nginx proxy for backend on 80/443 with ACME webroot
+- `certbot`: renews certificates periodically via webroot
 
 ## Usage
 

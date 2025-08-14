@@ -30,6 +30,9 @@ check: lint mypy test ## Run all checks (lint, type check, test)
 run: ## Run the bot
 	uv run python main.py
 
+run-backend: ## Run the Zoom FastAPI backend
+	uv run uvicorn zoom_backend.app:app --host 0.0.0.0 --port 8080 --proxy-headers
+
 clean: ## Clean up temporary files
 	rm -rf temp/
 	rm -rf .pytest_cache/

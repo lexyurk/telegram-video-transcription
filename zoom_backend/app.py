@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import hashlib
 import hmac
 import json
@@ -240,17 +241,42 @@ async def process_recording(
     async def download_audio(download_url: str, token: str) -> str:
         import tempfile, pathlib
 
-        async with httpx.AsyncClient(timeout=None) as c:
-            # Prefer Authorization header (works with OAuth and download_access_token)
-            r = await c.get(download_url, headers={"Authorization": f"Bearer {token}"})
-            if r.status_code == 401:
-                # Fallback to query param for short-lived tokens
-                dl = f"{download_url}{'&' if '?' in download_url else '?'}access_token={token}"
-                r = await c.get(dl)
-            r.raise_for_status()
-            fd, path = tempfile.mkstemp(suffix=".m4a")
-            pathlib.Path(path).write_bytes(r.content)
-            return path
+        async with httpx.AsyncClient(timeout=None, follow_redirects=False) as c:
+            # Try both header and query param strategies, handle up to 5 redirects
+            candidate_urls = [download_url]
+            candidate_urls.append(f"{download_url}{'&' if '?' in download_url else '?'}access_token={token}")
+
+            for candidate in candidate_urls:
+                url = candidate
+                headers = {"Authorization": f"Bearer {token}"} if candidate is download_url else {}
+                for _ in range(5):
+                    r = await c.get(url, headers=headers)
+                    if r.status_code == 200:
+                        fd, path = tempfile.mkstemp(suffix=".m4a")
+                        pathlib.Path(path).write_bytes(r.content)
+                        return path
+                    if r.status_code in (301, 302, 303, 307, 308):
+                        loc = r.headers.get("location")
+                        logger.info("Following redirect {} -> {}", r.status_code, loc)
+                        if not loc:
+                            break
+                        # On cross-host redirect, drop Authorization header for safety
+                        try:
+                            orig_host = httpx.URL(url).host
+                            new_host = httpx.URL(loc).host
+                        except Exception:
+                            orig_host = new_host = None
+                        if orig_host != new_host:
+                            headers = {}
+                        url = loc
+                        continue
+                    if r.status_code in (401, 403):
+                        # Try next candidate strategy
+                        break
+                    # Other errors
+                    r.raise_for_status()
+            # If all attempts failed, raise an informative error
+            raise HTTPException(status_code=502, detail="Failed to download recording after redirects and auth strategies")
 
     data: Dict[str, Any] = {}
     files: list = []

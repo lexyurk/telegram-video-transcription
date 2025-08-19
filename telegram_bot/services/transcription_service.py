@@ -277,3 +277,100 @@ class TranscriptionService:
             Transcribed text or None if failed
         """
         return await self.transcribe_audio(file_path) 
+
+    def _extract_segments_from_results(self, results: dict) -> list[dict]:
+        """
+        Extract diarized segments with timestamps from Deepgram results.
+        Returns a list of dicts: {start: float, end: float, speaker: int, text: str}
+        """
+        segments: list[dict] = []
+        try:
+            alt = results["channels"][0]["alternatives"][0]
+            paragraphs_data = alt.get("paragraphs")
+            paragraphs = None
+            if isinstance(paragraphs_data, dict):
+                paragraphs = paragraphs_data.get("paragraphs")
+            elif isinstance(paragraphs_data, list):
+                paragraphs = paragraphs_data
+            if paragraphs:
+                for paragraph in paragraphs:
+                    speaker = paragraph.get("speaker")
+                    for sentence in paragraph.get("sentences", []) or []:
+                        start = sentence.get("start") or sentence.get("start_time")
+                        end = sentence.get("end") or sentence.get("end_time")
+                        text = sentence.get("text", "")
+                        if start is not None and end is not None and speaker is not None:
+                            try:
+                                segments.append({
+                                    "start": float(start),
+                                    "end": float(end),
+                                    "speaker": int(speaker),
+                                    "text": text,
+                                })
+                            except Exception:
+                                pass
+            if not segments:
+                for utt in results.get("utterances", []) or []:
+                    start = utt.get("start")
+                    end = utt.get("end")
+                    speaker = utt.get("speaker")
+                    text = utt.get("transcript", "")
+                    if start is not None and end is not None and speaker is not None:
+                        try:
+                            segments.append({
+                                "start": float(start),
+                                "end": float(end),
+                                "speaker": int(speaker),
+                                "text": text,
+                            })
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.warning(f"Failed to extract segments: {e}")
+        return segments
+
+    async def transcribe_with_segments(self, file_path: str) -> tuple[str | None, list[dict]]:
+        """
+        Transcribe audio and also return diarized segments with timestamps for alignment.
+        Returns (formatted_transcript or None, segments list).
+        """
+        try:
+            settings = get_settings()
+            options = PrerecordedOptions(
+                model=settings.deepgram_model,
+                detect_language=True,
+                smart_format=settings.enable_smart_format,
+                punctuate=settings.enable_punctuation,
+                paragraphs=settings.enable_paragraphs,
+                diarize=settings.enable_diarization,
+                filler_words=settings.enable_filler_words,
+                profanity_filter=settings.enable_profanity_filter,
+            )
+            async with aiofiles.open(file_path, "rb") as audio_file:
+                buffer_data = await audio_file.read()
+            payload = {"buffer": buffer_data}
+            file_size_mb = len(buffer_data) / (1024 * 1024)
+            dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
+            actual_timeout = min(dynamic_timeout, self.timeout_seconds)
+            timeout_config = httpx.Timeout(connect=60.0, read=actual_timeout, write=600.0, pool=10.0)
+            response = await asyncio.to_thread(
+                self.client.listen.prerecorded.v("1").transcribe_file,
+                payload,
+                options,
+                timeout=timeout_config,
+            )
+            if hasattr(response, 'to_dict'):
+                response = response.to_dict()
+            elif hasattr(response, '__dict__'):
+                response = response.__dict__
+            if "results" not in response or not response["results"].get("channels"):
+                return None, []
+            results = response["results"]
+            segments = self._extract_segments_from_results(results)
+            formatted_transcript = await self._process_enhanced_transcript(results, settings)
+            if not formatted_transcript or not formatted_transcript.strip():
+                formatted_transcript = None
+            return formatted_transcript, segments
+        except Exception as e:
+            logger.error(f"Error in transcribe_with_segments: {e}", exc_info=True)
+            return None, []

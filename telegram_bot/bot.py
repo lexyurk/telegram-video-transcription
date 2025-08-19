@@ -612,8 +612,10 @@ Just send me a file and I'll handle the rest! 🚀
                 parse_mode="Markdown",
             )
 
-            # Identify and replace speaker names
-            transcript = await self.speaker_identification_service.process_transcript_with_speaker_names(transcript)
+            # Identify and replace speaker names using existing AI-based method
+            transcript = await self.speaker_identification_service.process_transcript_with_speaker_names(
+                transcript
+            )
 
             # Create transcript file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

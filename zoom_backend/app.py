@@ -6,6 +6,7 @@ import json
 import os
 import time
 import urllib.parse
+import re
 from typing import Any, Dict, Optional, List
 
 import httpx
@@ -17,6 +18,7 @@ from loguru import logger
 from telegram_bot.config import get_settings
 from telegram_bot.services.transcription_service import TranscriptionService
 from telegram_bot.services.summarization_service import SummarizationService
+from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
 from telegram_bot.services.file_service import FileService
 from zoom_backend.db import (
     ensure_db,
@@ -238,6 +240,49 @@ async def process_recording(
             r.raise_for_status()
             return r.json()
 
+    async def fetch_meeting_participants(access_token: str, meeting_uuid: str) -> list[str]:
+        """
+        Fetch participants for the meeting from Zoom to use their display names as speaker labels.
+        We'll try two endpoints: participants (past meeting) and fallback to recording participants.
+        Names are returned as a list preserving API order.
+        """
+        uid = _double_encode_uuid(meeting_uuid)
+        names: list[str] = []
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            # Try past meeting participants
+            try:
+                url1 = f"https://api.zoom.us/v2/past_meetings/{uid}/participants"
+                r1 = await c.get(url1, headers={"Authorization": "Bearer " + access_token})
+                if r1.status_code == 200:
+                    js = r1.json()
+                    for p in js.get("participants", []) or []:
+                        nm = (p.get("name") or p.get("user_name") or "").strip()
+                        if nm:
+                            names.append(nm)
+            except Exception:
+                pass
+            # Fallback to recording participants list
+            if not names:
+                try:
+                    url2 = f"https://api.zoom.us/v2/meetings/{uid}/recordings"
+                    r2 = await c.get(url2, headers={"Authorization": "Bearer " + access_token})
+                    if r2.status_code == 200:
+                        js2 = r2.json()
+                        for p in js2.get("participants", []) or []:
+                            nm = (p.get("name") or p.get("user_name") or "").strip()
+                            if nm:
+                                names.append(nm)
+                except Exception:
+                    pass
+        # De-duplicate while preserving order
+        seen = set()
+        uniq = []
+        for nm in names:
+            if nm not in seen:
+                seen.add(nm)
+                uniq.append(nm)
+        return uniq
+
     async def download_audio(download_url: str, token: str) -> str:
         import tempfile, pathlib
 
@@ -278,6 +323,152 @@ async def process_recording(
             # If all attempts failed, raise an informative error
             raise HTTPException(status_code=502, detail="Failed to download recording after redirects and auth strategies")
 
+    def _pick_transcript_file(recording_files: list) -> Optional[Dict[str, Any]]:
+        """
+        Pick the best available transcript/CC file from Zoom recording files.
+        Preference order: TRANSCRIPT -> CC -> VTT extension -> TIMELINE (last resort).
+        """
+        if not recording_files:
+            return None
+        # Normalize keys
+        def file_type(f: Dict[str, Any]) -> str:
+            return (f.get("file_type") or f.get("recording_type") or "").upper()
+        # Priority picks
+        for prefer in ("TRANSCRIPT", "CC"):
+            for f in recording_files:
+                if file_type(f) == prefer:
+                    return f
+        # Extension-based fallback
+        for f in recording_files:
+            url = f.get("download_url", "")
+            if url.lower().endswith(".vtt"):
+                return f
+        # Last resort: timeline
+        for f in recording_files:
+            if file_type(f) == "TIMELINE":
+                return f
+        return None
+
+    async def _download_text(download_url: str, token: str) -> Optional[str]:
+        """Download a small text-like resource (e.g., VTT/TRANSCRIPT) using Zoom access token."""
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as c:
+                # Try header auth first
+                r = await c.get(download_url, headers={"Authorization": f"Bearer {token}"})
+                if r.status_code == 200:
+                    return r.text
+                # Try query param
+                r2 = await c.get(f"{download_url}{'&' if '?' in download_url else '?'}access_token={token}")
+                if r2.status_code == 200:
+                    return r2.text
+        except Exception:
+            pass
+        return None
+
+    def _parse_vtt_time(ts: str) -> Optional[float]:
+        try:
+            # Format: HH:MM:SS.mmm
+            h, m, s = ts.split(":")
+            sec = float(s)
+            return int(h) * 3600 + int(m) * 60 + sec
+        except Exception:
+            return None
+
+    def _parse_vtt(vtt_text: str) -> List[Dict[str, Any]]:
+        """
+        Minimal VTT parser that extracts cues with start/end and text.
+        Attempts to extract a speaker name if cue text begins with "Name:".
+        Returns list of {start: float, end: float, text: str, name: Optional[str]}
+        """
+        segments: List[Dict[str, Any]] = []
+        if not vtt_text:
+            return segments
+        lines = vtt_text.splitlines()
+        i = 0
+        # Skip WEBVTT header if present
+        if i < len(lines) and lines[i].strip().upper().startswith("WEBVTT"):
+            i += 1
+        time_pat = re.compile(r"^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})")
+        while i < len(lines):
+            line = lines[i].strip()
+            i += 1
+            if not line:
+                continue
+            # Optional cue id line (numeric or any)
+            if not time_pat.match(line) and i < len(lines):
+                # Peek next; if next is time, treat this as cue id and continue
+                if not time_pat.match(lines[i].strip() if i < len(lines) else ""):
+                    # Skip until time line
+                    continue
+                else:
+                    line = lines[i].strip(); i += 1
+            m = time_pat.match(line)
+            if not m:
+                continue
+            start = _parse_vtt_time(m.group(1))
+            end = _parse_vtt_time(m.group(2))
+            text_lines: List[str] = []
+            while i < len(lines) and lines[i].strip():
+                text_lines.append(lines[i].rstrip())
+                i += 1
+            # Skip the blank line after cue
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            name: Optional[str] = None
+            text = " ".join(t.strip() for t in text_lines if t.strip()).strip()
+            # Extract name in format "Name: rest"
+            mname = re.match(r"^([^:]{1,60}):\s*(.*)$", text)
+            if mname:
+                candidate = mname.group(1).strip()
+                rest = mname.group(2).strip()
+                # Avoid generic diarization labels like Speaker 0
+                if not re.match(r"^(?:Speaker|Спикер)\s*\d+$", candidate, re.IGNORECASE):
+                    name = candidate
+                    text = rest
+            if start is not None and end is not None:
+                segments.append({"start": start, "end": end, "text": text, "name": name})
+        return segments
+
+    def _interval_overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
+        return max(0.0, min(a_end, b_end) - max(a_start, b_start))
+
+    def _align_names_by_overlap(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]]) -> Dict[str, str]:
+        """
+        For each diarized segment (with 'speaker', 'start', 'end'), find overlapping VTT cues that have a 'name'.
+        Accumulate overlap durations per (speaker_id -> name) and pick the name with the most overlap.
+        Returns mapping {speaker_id_str: name}.
+        """
+        if not diar_segments or not vtt_segments:
+            return {}
+        # Build name overlap per speaker
+        per_speaker: Dict[int, Dict[str, float]] = {}
+        for seg in diar_segments:
+            s_id = int(seg.get("speaker", 0))
+            s_start = float(seg.get("start", 0.0))
+            s_end = float(seg.get("end", 0.0))
+            if s_end <= s_start:
+                continue
+            name_to_dur = per_speaker.setdefault(s_id, {})
+            for cue in vtt_segments:
+                name = cue.get("name")
+                if not name:
+                    continue
+                c_start = float(cue.get("start", 0.0))
+                c_end = float(cue.get("end", 0.0))
+                if c_end <= c_start:
+                    continue
+                ov = _interval_overlap(s_start, s_end, c_start, c_end)
+                if ov > 0:
+                    name_to_dur[name] = name_to_dur.get(name, 0.0) + ov
+        # Pick best name per speaker
+        mapping: Dict[str, str] = {}
+        for s_id, name_durs in per_speaker.items():
+            if not name_durs:
+                continue
+            best_name = max(name_durs.items(), key=lambda x: x[1])[0]
+            mapping[str(s_id)] = best_name
+        return mapping
+
     data: Dict[str, Any] = {}
     files: list = []
     # Try up to 2 attempts; fallback to webhook payload if API errors
@@ -311,10 +502,46 @@ async def process_recording(
     try:
         transcription_service = TranscriptionService()
         summarization_service = SummarizationService()
+        speaker_service = SpeakerIdentificationService()
         file_service = FileService()
 
-        transcript = await transcription_service.transcribe_file(path)
+        transcript, diar_segments = await transcription_service.transcribe_with_segments(path)
         if transcript:
+            # Try Zoom cloud transcript alignment first
+            aligned_mapping: Dict[str, str] = {}
+            try:
+                tfile = _pick_transcript_file(files)
+                if tfile:
+                    vtt_text = await _download_text(tfile.get("download_url", ""), token)
+                    if vtt_text:
+                        vtt_segments = _parse_vtt(vtt_text)
+                        if vtt_segments:
+                            aligned_mapping = _align_names_by_overlap(diar_segments or [], vtt_segments)
+                            if aligned_mapping:
+                                try:
+                                    aligned_mapping = speaker_service._disambiguate_speaker_names(aligned_mapping)  # type: ignore[attr-defined]
+                                except Exception:
+                                    pass
+                                transcript = speaker_service.replace_speaker_labels(transcript, aligned_mapping)
+            except Exception as e:
+                logger.warning(f"Zoom transcript alignment failed: {e}")
+
+            # Try applying Zoom participant names to the transcript before saving
+            if not aligned_mapping:
+                zoom_names: list[str] = []
+                try:
+                    zoom_names = await fetch_meeting_participants(access_token, meeting_uuid)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch Zoom participants: {e}")
+                if zoom_names:
+                    try:
+                        transcript = await speaker_service.process_transcript_with_speaker_names(
+                            transcript,
+                            external_candidate_names=zoom_names,
+                            prefer_external=True,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to apply Zoom speaker names: {e}")
             # Save and send transcript file
             timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
             transcript_filename = f"transcript_{timestamp}.txt"

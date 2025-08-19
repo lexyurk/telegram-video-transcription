@@ -325,6 +325,35 @@ class TranscriptionService:
                             })
                         except Exception:
                             pass
+            # Fallback: build segments from words if still empty
+            if not segments:
+                words = alt.get("words") or []
+                # Group consecutive words by speaker with short gaps
+                current = None
+                last_end = None
+                for w in words:
+                    s = w.get("speaker")
+                    start = w.get("start")
+                    end = w.get("end")
+                    text = w.get("word") or w.get("punctuated_word") or ""
+                    if s is None or start is None or end is None:
+                        continue
+                    s = int(s)
+                    start = float(start)
+                    end = float(end)
+                    if current and current["speaker"] == s and last_end is not None and start - last_end <= 0.5:
+                        # continue segment
+                        current["end"] = end
+                        if text:
+                            current["text"] += (" " if current["text"] else "") + text
+                    else:
+                        # flush previous
+                        if current:
+                            segments.append(current)
+                        current = {"start": start, "end": end, "speaker": s, "text": text}
+                    last_end = end
+                if current:
+                    segments.append(current)
         except Exception as e:
             logger.warning(f"Failed to extract segments: {e}")
         return segments

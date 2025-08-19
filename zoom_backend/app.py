@@ -153,11 +153,11 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=401, detail="bad signature")
 
     event = body.get("event")
-    if event == "recording.completed":
+    if event in ("recording.completed", "recording.transcript_completed"):
         obj = body["payload"]["object"]
         zoom_user_id = obj["host_id"]
         meeting_uuid = obj["uuid"]
-        logger.info("recording.completed: host_id={}, uuid_prefix={}...", zoom_user_id, str(meeting_uuid)[:10])
+        logger.info("{}: host_id={}, uuid_prefix={}...", event, zoom_user_id, str(meeting_uuid)[:10])
 
         # Look up chat_id
         with get_conn(settings.zoom_db_path) as conn:
@@ -352,8 +352,8 @@ async def process_recording(
     async def _download_text(download_url: str, token: str) -> Optional[str]:
         """Download a small text-like resource (e.g., VTT/TRANSCRIPT) using Zoom access token."""
         try:
-            async with httpx.AsyncClient(timeout=30.0) as c:
-                # Try header auth first
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+                # Try header auth first (follow redirects automatically)
                 r = await c.get(download_url, headers={"Authorization": f"Bearer {token}"})
                 if r.status_code == 200:
                     return r.text
@@ -367,10 +367,17 @@ async def process_recording(
 
     def _parse_vtt_time(ts: str) -> Optional[float]:
         try:
-            # Format: HH:MM:SS.mmm
-            h, m, s = ts.split(":")
-            sec = float(s)
-            return int(h) * 3600 + int(m) * 60 + sec
+            # Support HH:MM:SS.mmm or MM:SS.mmm
+            parts = ts.split(":")
+            if len(parts) == 3:
+                h, m, s = parts
+                sec = float(s)
+                return int(h) * 3600 + int(m) * 60 + sec
+            if len(parts) == 2:
+                m, s = parts
+                sec = float(s)
+                return int(m) * 60 + sec
+            return None
         except Exception:
             return None
 
@@ -432,7 +439,7 @@ async def process_recording(
     def _interval_overlap(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
         return max(0.0, min(a_end, b_end) - max(a_start, b_start))
 
-    def _align_names_by_overlap(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]]) -> Dict[str, str]:
+    def _align_names_by_overlap(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]], offset_seconds: float = 0.0) -> Dict[str, str]:
         """
         For each diarized segment (with 'speaker', 'start', 'end'), find overlapping VTT cues that have a 'name'.
         Accumulate overlap durations per (speaker_id -> name) and pick the name with the most overlap.
@@ -444,8 +451,8 @@ async def process_recording(
         per_speaker: Dict[int, Dict[str, float]] = {}
         for seg in diar_segments:
             s_id = int(seg.get("speaker", 0))
-            s_start = float(seg.get("start", 0.0))
-            s_end = float(seg.get("end", 0.0))
+            s_start = float(seg.get("start", 0.0)) + offset_seconds
+            s_end = float(seg.get("end", 0.0)) + offset_seconds
             if s_end <= s_start:
                 continue
             name_to_dur = per_speaker.setdefault(s_id, {})
@@ -468,6 +475,71 @@ async def process_recording(
             best_name = max(name_durs.items(), key=lambda x: x[1])[0]
             mapping[str(s_id)] = best_name
         return mapping
+
+    def _align_with_offset_search(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]]) -> Dict[str, str]:
+        """
+        Try multiple offsets to account for differences between Zoom transcript time origin and audio-only file.
+        Searches offsets in [-30s, +30s] with 0.5s step and picks mapping with maximum total overlap.
+        """
+        if not diar_segments or not vtt_segments:
+            return {}
+        best_mapping: Dict[str, str] = {}
+        best_score = 0.0
+        # Coarse-to-fine: 1s step first, then refine +/- 0.5s around best
+        def score_mapping(mp: Dict[str, str]) -> float:
+            # Sum durations of selected name per speaker
+            total = 0.0
+            # Build quick lookup of durations per speaker-name
+            per_speaker: Dict[int, Dict[str, float]] = {}
+            for seg in diar_segments:
+                per_speaker.setdefault(int(seg.get("speaker", 0)), {})
+            # Recompute per_speaker durations at offset 0 and reuse _align_names_by_overlap logic would duplicate work
+            # Here, we simply count count of mapped speakers as proxy when scoring mapping
+            return float(len(mp))
+        # Use actual overlap sum as score
+        for offset in [x / 1.0 for x in range(-30, 31)]:
+            mp = _align_names_by_overlap(diar_segments, vtt_segments, offset_seconds=offset)
+            # Compute total overlap for this mapping
+            total_overlap = 0.0
+            if mp:
+                # Sum overlap for chosen name per speaker
+                for seg in diar_segments:
+                    s_id = str(int(seg.get("speaker", 0)))
+                    name = mp.get(s_id)
+                    if not name:
+                        continue
+                    s_start = float(seg.get("start", 0.0)) + offset
+                    s_end = float(seg.get("end", 0.0)) + offset
+                    for cue in vtt_segments:
+                        if cue.get("name") != name:
+                            continue
+                        c_start = float(cue.get("start", 0.0))
+                        c_end = float(cue.get("end", 0.0))
+                        total_overlap += _interval_overlap(s_start, s_end, c_start, c_end)
+            if total_overlap > best_score and mp:
+                best_score = total_overlap
+                best_mapping = mp
+        return best_mapping
+
+    async def _find_any_vtt_text(files: List[Dict[str, Any]], token: str) -> Optional[str]:
+        """
+        Last-resort scan through non-media recording files to find any VTT-like text.
+        Avoids fetching large media by filtering likely text types.
+        """
+        if not files:
+            return None
+        candidate_types = {"TRANSCRIPT", "CC", "TIMELINE", "CHAT"}
+        for f in files:
+            ftype = (f.get("file_type") or f.get("recording_type") or "").upper()
+            if ftype not in candidate_types:
+                continue
+            url = f.get("download_url")
+            if not url:
+                continue
+            txt = await _download_text(url, token)
+            if txt and txt.strip().upper().startswith("WEBVTT"):
+                return txt
+        return None
 
     data: Dict[str, Any] = {}
     files: list = []
@@ -507,22 +579,41 @@ async def process_recording(
 
         transcript, diar_segments = await transcription_service.transcribe_with_segments(path)
         if transcript:
-            # Try Zoom cloud transcript alignment first
+            # Try Zoom cloud transcript alignment first (retry briefly if transcript not ready yet)
             aligned_mapping: Dict[str, str] = {}
             try:
-                tfile = _pick_transcript_file(files)
-                if tfile:
-                    vtt_text = await _download_text(tfile.get("download_url", ""), token)
-                    if vtt_text:
-                        vtt_segments = _parse_vtt(vtt_text)
-                        if vtt_segments:
-                            aligned_mapping = _align_names_by_overlap(diar_segments or [], vtt_segments)
-                            if aligned_mapping:
-                                try:
-                                    aligned_mapping = speaker_service._disambiguate_speaker_names(aligned_mapping)  # type: ignore[attr-defined]
-                                except Exception:
-                                    pass
-                                transcript = speaker_service.replace_speaker_labels(transcript, aligned_mapping)
+                logger.info("Attempting Zoom transcript alignment for meeting {}", meeting_uuid[:10])
+                max_tries = 6  # ~60 seconds total if transcript is still being generated
+                for attempt in range(1, max_tries + 1):
+                    tfile = _pick_transcript_file(files)
+                    if tfile:
+                        logger.info("Found transcript/CC file on attempt {}", attempt)
+                        vtt_text = await _download_text(tfile.get("download_url", ""), token)
+                        if vtt_text:
+                            vtt_segments = _parse_vtt(vtt_text)
+                            logger.info("Parsed {} VTT cues", len(vtt_segments))
+                            if vtt_segments:
+                                # Try direct alignment and with offset search
+                                aligned_mapping = _align_names_by_overlap(diar_segments or [], vtt_segments)
+                                if not aligned_mapping:
+                                    aligned_mapping = _align_with_offset_search(diar_segments or [], vtt_segments)
+                                logger.info("Aligned {} speakers via overlap", len(aligned_mapping))
+                                break
+                    if attempt < max_tries:
+                        logger.info("Transcript not ready yet; retrying ({}/{})...", attempt, max_tries)
+                        await asyncio.sleep(10)
+                        try:
+                            data = await fetch_recording_files(access_token, meeting_uuid)
+                            files = data.get("recording_files", [])
+                            token = data.get("download_access_token") or token
+                        except Exception as e2:
+                            logger.warning(f"Re-fetch recording files failed: {e2}")
+                if aligned_mapping:
+                    try:
+                        aligned_mapping = speaker_service._disambiguate_speaker_names(aligned_mapping)  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    transcript = speaker_service.replace_speaker_labels(transcript, aligned_mapping)
             except Exception as e:
                 logger.warning(f"Zoom transcript alignment failed: {e}")
 

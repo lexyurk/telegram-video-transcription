@@ -69,6 +69,50 @@ class SpeakerIdentificationService:
                 
         return disambiguated_names
 
+    def _collect_speaker_ids_in_order(self, transcript: str) -> list[str]:
+        """
+        Scan transcript lines and collect unique speaker IDs (as strings) in first-appearance order.
+        Supports English and Russian diarization labels like "Speaker 0:" or "Спикер 1:".
+        """
+        ordered_ids: list[str] = []
+        seen: Set[str] = set()
+        line_pattern = re.compile(r"^(?:Speaker|Спикер)\s*(\d+)\s*:\s*", re.IGNORECASE)
+        for raw_line in transcript.split('\n'):
+            line = raw_line.strip()
+            m = line_pattern.match(line)
+            if not m:
+                continue
+            sid = str(m.group(1))
+            if sid not in seen:
+                seen.add(sid)
+                ordered_ids.append(sid)
+        return ordered_ids
+
+    def _map_external_names_by_first_occurrence(self, transcript: str, external_names: list[str]) -> Dict[str, str]:
+        """
+        Map diarization speaker IDs to external names by order of first appearance in the transcript.
+        Extra names are ignored; if fewer names than speakers, remaining speakers are unmapped.
+        Duplicated names are preserved and will be disambiguated later if needed.
+        """
+        if not external_names:
+            return {}
+        # Clean and preserve order but drop empties
+        cleaned_names: list[str] = []
+        for name in external_names:
+            if isinstance(name, str):
+                nm = name.strip()
+                if nm:
+                    cleaned_names.append(nm)
+        if not cleaned_names:
+            return {}
+        speaker_ids = self._collect_speaker_ids_in_order(transcript)
+        mapping: Dict[str, str] = {}
+        for idx, sid in enumerate(speaker_ids):
+            if idx >= len(cleaned_names):
+                break
+            mapping[sid] = cleaned_names[idx]
+        return mapping
+
     async def identify_speakers(self, transcript: str) -> Dict[str, str] | None:
         """
         Identify speaker names from the transcript using AI.
@@ -231,7 +275,12 @@ Transcript:
 
         return updated_transcript
 
-    async def process_transcript_with_speaker_names(self, transcript: str) -> str:
+    async def process_transcript_with_speaker_names(
+        self,
+        transcript: str,
+        external_candidate_names: Optional[list[str]] = None,
+        prefer_external: bool = True,
+    ) -> str:
         """
         Complete pipeline: identify speakers and replace labels in transcript.
         Automatically handles name disambiguation for speakers with the same name.
@@ -243,8 +292,20 @@ Transcript:
             Updated transcript with actual speaker names (or original if identification failed)
         """
         try:
-            # First, identify the speakers
-            speaker_names = await self.identify_speakers(transcript)
+            # If external names are provided (e.g., from Zoom), try them first depending on preference
+            speaker_names: Dict[str, str] | None = None
+            if external_candidate_names and prefer_external:
+                try:
+                    mapped = self._map_external_names_by_first_occurrence(transcript, external_candidate_names)
+                    if mapped:
+                        speaker_names = self._disambiguate_speaker_names(mapped)
+                        logger.info(f"Applied {len(speaker_names)} external speaker names to transcript")
+                except Exception as e:
+                    logger.warning(f"Failed to apply external candidate names: {e}")
+
+            # Fallback to AI identification if no names applied yet
+            if not speaker_names:
+                speaker_names = await self.identify_speakers(transcript)
             
             if speaker_names is None:
                 logger.error("Failed to identify speakers, returning original transcript")

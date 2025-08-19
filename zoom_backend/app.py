@@ -17,6 +17,7 @@ from loguru import logger
 from telegram_bot.config import get_settings
 from telegram_bot.services.transcription_service import TranscriptionService
 from telegram_bot.services.summarization_service import SummarizationService
+from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
 from telegram_bot.services.file_service import FileService
 from zoom_backend.db import (
     ensure_db,
@@ -238,6 +239,49 @@ async def process_recording(
             r.raise_for_status()
             return r.json()
 
+    async def fetch_meeting_participants(access_token: str, meeting_uuid: str) -> list[str]:
+        """
+        Fetch participants for the meeting from Zoom to use their display names as speaker labels.
+        We'll try two endpoints: participants (past meeting) and fallback to recording participants.
+        Names are returned as a list preserving API order.
+        """
+        uid = _double_encode_uuid(meeting_uuid)
+        names: list[str] = []
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            # Try past meeting participants
+            try:
+                url1 = f"https://api.zoom.us/v2/past_meetings/{uid}/participants"
+                r1 = await c.get(url1, headers={"Authorization": "Bearer " + access_token})
+                if r1.status_code == 200:
+                    js = r1.json()
+                    for p in js.get("participants", []) or []:
+                        nm = (p.get("name") or p.get("user_name") or "").strip()
+                        if nm:
+                            names.append(nm)
+            except Exception:
+                pass
+            # Fallback to recording participants list
+            if not names:
+                try:
+                    url2 = f"https://api.zoom.us/v2/meetings/{uid}/recordings"
+                    r2 = await c.get(url2, headers={"Authorization": "Bearer " + access_token})
+                    if r2.status_code == 200:
+                        js2 = r2.json()
+                        for p in js2.get("participants", []) or []:
+                            nm = (p.get("name") or p.get("user_name") or "").strip()
+                            if nm:
+                                names.append(nm)
+                except Exception:
+                    pass
+        # De-duplicate while preserving order
+        seen = set()
+        uniq = []
+        for nm in names:
+            if nm not in seen:
+                seen.add(nm)
+                uniq.append(nm)
+        return uniq
+
     async def download_audio(download_url: str, token: str) -> str:
         import tempfile, pathlib
 
@@ -311,10 +355,27 @@ async def process_recording(
     try:
         transcription_service = TranscriptionService()
         summarization_service = SummarizationService()
+        speaker_service = SpeakerIdentificationService()
         file_service = FileService()
 
         transcript = await transcription_service.transcribe_file(path)
         if transcript:
+            # Try applying Zoom participant names to the transcript before saving
+            zoom_names: list[str] = []
+            try:
+                zoom_names = await fetch_meeting_participants(access_token, meeting_uuid)
+            except Exception as e:
+                logger.warning(f"Failed to fetch Zoom participants: {e}")
+
+            if zoom_names:
+                try:
+                    transcript = await speaker_service.process_transcript_with_speaker_names(
+                        transcript,
+                        external_candidate_names=zoom_names,
+                        prefer_external=True,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to apply Zoom speaker names: {e}")
             # Save and send transcript file
             timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
             transcript_filename = f"transcript_{timestamp}.txt"

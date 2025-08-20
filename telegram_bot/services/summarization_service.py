@@ -112,7 +112,7 @@ Structure your response as:
 - Prioritize urgent items first
 
 - Include explicit "task for AI" assignments: detect phrases that explicitly assign a "task for AI" (e.g., "task for artificial intelligence", "задача для ИИ"), extract the task as a concrete, actionable item, and assign to the speaker who said it unless a specific assignee is named; if named, use that person.
-Include such AI-related tasks under "Action Items" with clear assignees
+- Do not create a separate "Tasks for AI" section. Include such AI-related tasks under "Action Items" with clear assignees.
 
 **Next Steps**
 - Immediate follow-ups needed

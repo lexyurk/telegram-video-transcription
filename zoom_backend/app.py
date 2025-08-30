@@ -642,7 +642,7 @@ async def process_recording(
             # Create and send summary
             summary = await summarization_service.create_summary_with_action_points(transcript)
             if summary:
-                await send_long_message(chat_id, f"📋 Summary & Action Points\n\n{summary}")
+                await send_long_message(chat_id, f"📋 *Summary & Action Points*\n\n{summary}")
         else:
             await send_message(chat_id, "⚠️ Could not create transcript from Zoom recording.")
     except Exception as e:
@@ -657,10 +657,19 @@ async def send_telegram_audio(chat_id: int, path: str, caption: str) -> None:
     token = settings.telegram_bot_token
     api = f"https://api.telegram.org/bot{token}/sendAudio"
     files = {"audio": open(path, "rb")}
-    data = {"chat_id": chat_id, "caption": caption}
+    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
     async with httpx.AsyncClient(timeout=None) as c:
-        r = await c.post(api, data=data, files=files)
-        r.raise_for_status()
+        try:
+            r = await c.post(api, data=data, files=files)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Fallback to plain text if markdown parsing fails
+            if e.response is not None and e.response.status_code == 400:
+                data_fallback = {"chat_id": chat_id, "caption": caption}
+                r = await c.post(api, data=data_fallback, files=files)
+                r.raise_for_status()
+            else:
+                raise
 
 
 async def send_telegram_document(chat_id: int, path: str, caption: str) -> None:
@@ -670,10 +679,18 @@ async def send_telegram_document(chat_id: int, path: str, caption: str) -> None:
     token = settings.telegram_bot_token
     api = f"https://api.telegram.org/bot{token}/sendDocument"
     files = {"document": open(path, "rb")}
-    data = {"chat_id": chat_id, "caption": caption}
+    data = {"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"}
     async with httpx.AsyncClient(timeout=None) as c:
-        r = await c.post(api, data=data, files=files)
-        r.raise_for_status()
+        try:
+            r = await c.post(api, data=data, files=files)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code == 400:
+                data_fallback = {"chat_id": chat_id, "caption": caption}
+                r = await c.post(api, data=data_fallback, files=files)
+                r.raise_for_status()
+            else:
+                raise
 
 
 async def send_message(chat_id: int, text: str) -> None:
@@ -682,10 +699,18 @@ async def send_message(chat_id: int, text: str) -> None:
     settings = get_settings()
     token = settings.telegram_bot_token
     api = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = {"chat_id": chat_id, "text": text}
+    data = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     async with httpx.AsyncClient(timeout=30.0) as c:
-        r = await c.post(api, data=data)
-        r.raise_for_status()
+        try:
+            r = await c.post(api, data=data)
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and e.response.status_code == 400:
+                data_fallback = {"chat_id": chat_id, "text": text}
+                r = await c.post(api, data=data_fallback)
+                r.raise_for_status()
+            else:
+                raise
 
 
 def _split_message(message: str, max_length: int = 4000) -> List[str]:

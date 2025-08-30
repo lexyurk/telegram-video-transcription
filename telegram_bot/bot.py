@@ -650,8 +650,8 @@ Just send me a file and I'll handle the rest! 🚀
             )
 
             if summary:
-                # Send summary as formatted message
-                summary_message = f"📋 **Summary & Action Points**\n\n{summary}"
+                # Send summary as formatted message (Telegram classic Markdown uses single * for bold)
+                summary_message = f"📋 *Summary & Action Points*\n\n{summary}"
 
                 # Split long messages if needed
                 if len(summary_message) <= 4096:
@@ -681,7 +681,7 @@ Just send me a file and I'll handle the rest! 🚀
                             else:
                                 await context.bot.send_message(
                                     chat_id=update.effective_chat.id,
-                                    text=f"📋 **Summary & Action Points (Part {i+1})**\n\n{chunk}",
+                                    text=f"📋 *Summary & Action Points (Part {i+1})*\n\n{chunk}",
                                     parse_mode="Markdown",
                                 )
                         except Exception as e:

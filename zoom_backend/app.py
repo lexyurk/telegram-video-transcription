@@ -395,7 +395,8 @@ async def process_recording(
         # Skip WEBVTT header if present
         if i < len(lines) and lines[i].strip().upper().startswith("WEBVTT"):
             i += 1
-        time_pat = re.compile(r"^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})")
+        # Accept HH:MM:SS.mmm or MM:SS.mmm on either side
+        time_pat = re.compile(r"^((?:\d{2}:)?\d{2}:\d{2}\.\d{3})\s+-->\s+((?:\d{2}:)?\d{2}:\d{2}\.\d{3})")
         while i < len(lines):
             line = lines[i].strip()
             i += 1
@@ -423,6 +424,9 @@ async def process_recording(
                 i += 1
             name: Optional[str] = None
             text = " ".join(t.strip() for t in text_lines if t.strip()).strip()
+            # Zoom often prefixes speaker with ">> Name:" - strip leading chevrons
+            if text.startswith(">"):
+                text = re.sub(r"^\s*>+\s*", "", text)
             # Extract name in format "Name: rest"
             mname = re.match(r"^([^:]{1,60}):\s*(.*)$", text)
             if mname:
@@ -476,7 +480,7 @@ async def process_recording(
             mapping[str(s_id)] = best_name
         return mapping
 
-    def _align_with_offset_search(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]]) -> Dict[str, str]:
+    def _align_with_offset_search(diar_segments: List[Dict[str, Any]], vtt_segments: List[Dict[str, Any]], center_offset_seconds: Optional[float] = None) -> Dict[str, str]:
         """
         Try multiple offsets to account for differences between Zoom transcript time origin and audio-only file.
         Searches offsets in [-30s, +30s] with 0.5s step and picks mapping with maximum total overlap.
@@ -496,9 +500,18 @@ async def process_recording(
             # Recompute per_speaker durations at offset 0 and reuse _align_names_by_overlap logic would duplicate work
             # Here, we simply count count of mapped speakers as proxy when scoring mapping
             return float(len(mp))
+        # Define search window
+        if center_offset_seconds is None:
+            start_off = -30.0
+            end_off = 30.0
+        else:
+            # Search ±120s around the hint
+            start_off = center_offset_seconds - 120.0
+            end_off = center_offset_seconds + 120.0
         # Use actual overlap sum as score
-        for offset in [x / 1.0 for x in range(-30, 31)]:
-            mp = _align_names_by_overlap(diar_segments, vtt_segments, offset_seconds=offset)
+        off = start_off
+        while off <= end_off:
+            mp = _align_names_by_overlap(diar_segments, vtt_segments, offset_seconds=off)
             # Compute total overlap for this mapping
             total_overlap = 0.0
             if mp:
@@ -508,8 +521,8 @@ async def process_recording(
                     name = mp.get(s_id)
                     if not name:
                         continue
-                    s_start = float(seg.get("start", 0.0)) + offset
-                    s_end = float(seg.get("end", 0.0)) + offset
+                    s_start = float(seg.get("start", 0.0)) + off
+                    s_end = float(seg.get("end", 0.0)) + off
                     for cue in vtt_segments:
                         if cue.get("name") != name:
                             continue
@@ -519,6 +532,8 @@ async def process_recording(
             if total_overlap > best_score and mp:
                 best_score = total_overlap
                 best_mapping = mp
+            # step 1.0 seconds
+            off += 1.0
         return best_mapping
 
     async def _find_any_vtt_text(files: List[Dict[str, Any]], token: str) -> Optional[str]:
@@ -593,10 +608,39 @@ async def process_recording(
                             vtt_segments = _parse_vtt(vtt_text)
                             logger.info("Parsed {} VTT cues", len(vtt_segments))
                             if vtt_segments:
-                                # Try direct alignment and with offset search
+                                # Try direct alignment and with offset search; center search around offset hint if available
+                                offset_hint: Optional[float] = None
+                                try:
+                                    # Prefer difference between audio recording start and meeting start
+                                    meeting_start_iso = data.get("start_time") or start_time or ""
+                                    audio_start_iso = (audio or {}).get("recording_start") or ""
+                                    if meeting_start_iso and audio_start_iso:
+                                        from datetime import datetime, timezone
+                                        def _parse_iso(s: str) -> Optional[float]:
+                                            try:
+                                                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                                                return dt.replace(tzinfo=dt.tzinfo or timezone.utc).timestamp()
+                                            except Exception:
+                                                return None
+                                        mt = _parse_iso(meeting_start_iso)
+                                        at = _parse_iso(audio_start_iso)
+                                        if mt is not None and at is not None:
+                                            offset_hint = at - mt
+                                    # Fallback: if VTT cues start far from zero, use that as hint
+                                    if offset_hint is None and vtt_segments:
+                                        try:
+                                            first_cue_start = float(min(c.get("start", 0.0) for c in vtt_segments))
+                                            if first_cue_start > 60.0:
+                                                offset_hint = first_cue_start
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
                                 aligned_mapping = _align_names_by_overlap(diar_segments or [], vtt_segments)
                                 if not aligned_mapping:
-                                    aligned_mapping = _align_with_offset_search(diar_segments or [], vtt_segments)
+                                    aligned_mapping = _align_with_offset_search(
+                                        diar_segments or [], vtt_segments, center_offset_seconds=offset_hint
+                                    )
                                 logger.info("Aligned {} speakers via overlap", len(aligned_mapping))
                                 break
                     if attempt < max_tries:

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     temp_dir: str = Field(default="./temp", alias="TEMP_DIR")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    deepgram_model: str = Field(default="nova-3", alias="DEEPGRAM_MODEL")
+    deepgram_model: str = Field(default="nova-2", alias="DEEPGRAM_MODEL")
     deepgram_timeout_seconds: int = Field(
         default=3600, alias="DEEPGRAM_TIMEOUT_SECONDS"
     )

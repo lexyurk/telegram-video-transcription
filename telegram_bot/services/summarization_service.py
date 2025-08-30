@@ -3,7 +3,7 @@
 import re
 from loguru import logger
 
-from telegram_bot.services.ai_model import AIModel
+from telegram_bot.services.ai_model import AIModel, create_ai_model
 
 
 class SummarizationService:
@@ -11,9 +11,12 @@ class SummarizationService:
 
     def __init__(self, ai_model: AIModel | None = None) -> None:
         """Initialize the summarization service."""
-        from telegram_bot.services.ai_model import create_ai_model
-        
-        self.ai_model = ai_model or create_ai_model()
+        if ai_model is not None:
+            self.ai_model = ai_model
+        else:
+            # Use module-level create_ai_model so tests can patch it via
+            # telegram_bot.services.summarization_service.create_ai_model
+            self.ai_model = create_ai_model()
 
     def _remove_speaker_labels(self, text: str) -> str:
         """

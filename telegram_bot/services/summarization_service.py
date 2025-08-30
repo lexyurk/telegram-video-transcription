@@ -70,7 +70,8 @@ class SummarizationService:
         
         # Convert double-asterisk bold (**text**) to single-asterisk (*text*)
         # to align with Telegram's classic Markdown parser
-        text = re.sub(r"\*\*([^\n*]+)\*\*", r"*\\1*", text)
+        # NOTE: Use a proper backreference (\1) in the replacement
+        text = re.sub(r"\*\*([^\n*]+)\*\*", r"*\1*", text)
 
         # Remove any remaining problematic characters that could break parsing
         text = re.sub(r'[^\w\s\n\r\*_`#\-\.\!\?\(\)\[\]:\|]', '', text)

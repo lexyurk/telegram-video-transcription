@@ -1,11 +1,17 @@
-"""Services package for telegram bot.
+"""Convenience imports for telegram bot services."""
 
-This package exposes multiple service modules. To keep imports lightweight and
-avoid importing heavy optional dependencies at package import time, we do not
-eagerly import submodules here. Import the needed service directly, e.g.:
+from .file_service import FileService
+from .transcription_service import TranscriptionService
+from .summarization_service import SummarizationService
+from .speaker_identification_service import SpeakerIdentificationService
+from .diagram_service import DiagramService
+from .question_answering_service import QuestionAnsweringService
 
-    from telegram_bot.services.ai_model import GeminiModel
-    from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
-"""
-
-__all__: list[str] = []
+__all__ = [
+    "FileService",
+    "TranscriptionService",
+    "SummarizationService",
+    "SpeakerIdentificationService",
+    "DiagramService",
+    "QuestionAnsweringService",
+]

@@ -162,6 +162,15 @@ wheels = [
 ]
 
 [[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148 },
+]
+
+[[package]]
 name = "black"
 version = "25.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1186,6 +1195,23 @@ wheels = [
 ]
 
 [[package]]
+name = "posthog"
+version = "6.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/fa/ba37ce818158593d101ea8a1a94faf6104b5dd08a55484d429f09e17d03f/posthog-6.7.2.tar.gz", hash = "sha256:83d829b1a6025212feec8088dc057a359201631411626336ba0337fa497b97b1", size = 117781 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/be/0947a17269bfbf23f96eab9b4b429b4b32c129131ecccf35dd61636f1d61/posthog-6.7.2-py3-none-any.whl", hash = "sha256:2b13c458aa0413772efb029d8c3fc0c169107fdd6206eadcfd9b670d4b8ae35e", size = 135968 },
+]
+
+[[package]]
 name = "propcache"
 version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1671,6 +1697,7 @@ dependencies = [
     { name = "loguru" },
     { name = "matplotlib" },
     { name = "networkx" },
+    { name = "posthog" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
@@ -1712,6 +1739,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "networkx", specifier = ">=3.2.0" },
+    { name = "posthog", specifier = ">=3.5.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
     { name = "pyjwt", specifier = ">=2.8.0" },
@@ -1741,6 +1769,7 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/58/af/9b7111e3f63fffe8e55b7ceb8bda023173e2052f420b6debcb25fd2fbc15/telethon-1.40.0.tar.gz", hash = "sha256:40e83326877a2e68b754d4b6d0d1ca5ac924110045b039e02660f2d67add97db", size = 646723 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/5a/c5370edb3215d19a6e858f4169b8eec725ba55f9d39df0f557508048c037/Telethon-1.40.0-py3-none-any.whl", hash = "sha256:146fd4cb2a7afa66bc67f9c2167756096a37b930f65711a3e7399ec9874dcfa7", size = 722013 },
+    { url = "https://files.pythonhosted.org/packages/ce/b0/78f74085b6c88c2bf2bec39c67267cd9ba6af24ceaea9654fb0c272a53da/telethon-1.40.0-py3-none-any.whl", hash = "sha256:1aebaca04fd8410968816645bdbcc0baeff55429b6d6bec37e647417bb8e8a2c", size = 744897 },
 ]
 
 [[package]]

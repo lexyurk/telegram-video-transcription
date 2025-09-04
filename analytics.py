@@ -43,12 +43,23 @@ class Analytics:
         except Exception:
             pass
 
-    def capture(self, distinct_id: str, event: str, properties: Optional[Dict[str, Any]] = None) -> None:
+    def capture(
+        self,
+        distinct_id: str,
+        event: str,
+        properties: Optional[Dict[str, Any]] = None,
+        groups: Optional[Dict[str, Any]] = None,
+    ) -> None:
         if not self.enabled or not self._client:
             return
         try:
             # v6+ signature supports keyword args
-            self._client.capture(event=event, distinct_id=distinct_id, properties=properties or {})
+            self._client.capture(
+                event=event,
+                distinct_id=distinct_id,
+                properties=properties or {},
+                groups=groups or None,
+            )
         except Exception:
             pass
 
@@ -65,6 +76,34 @@ class Analytics:
                 distinct_id=primary_distinct_id,
                 properties={"alias": secondary_distinct_id, "distinct_id": primary_distinct_id},
             )
+        except Exception:
+            pass
+
+    def group_identify(
+        self,
+        group_type: str,
+        group_key: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not self.enabled or not self._client:
+            return
+        try:
+            if hasattr(self._client, "group_identify"):
+                # Newer client API
+                self._client.group_identify(
+                    group_type=group_type, group_key=group_key, properties=properties or {}
+                )
+            else:
+                # Fallback using capture semantics
+                self._client.capture(
+                    event="$groupidentify",
+                    distinct_id=f"group::{group_type}:{group_key}",
+                    properties={
+                        "$group_type": group_type,
+                        "$group_key": group_key,
+                        "$group_set": properties or {},
+                    },
+                )
         except Exception:
             pass
 

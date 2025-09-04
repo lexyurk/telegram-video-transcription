@@ -104,17 +104,7 @@ Just send me a file and I'll handle the rest! 🚀
         try:
             user = update.effective_user
             distinct_id = tg_distinct_id(user.id)
-            analytics.identify(
-                distinct_id,
-                {
-                    "platform": "telegram",
-                    "username": getattr(user, "username", None),
-                    "first_name": getattr(user, "first_name", None),
-                    "last_name": getattr(user, "last_name", None),
-                    "language_code": getattr(user, "language_code", None),
-                    "is_bot": getattr(user, "is_bot", None),
-                },
-            )
+            self._identify_telegram_user(user)
             analytics.capture(
                 distinct_id,
                 "command_start",
@@ -147,6 +137,7 @@ Just send me a file and I'll handle the rest! 🚀
         )
         try:
             user = update.effective_user
+            self._identify_telegram_user(user)
             analytics.capture(
                 tg_distinct_id(user.id),
                 "command_connect_zoom",
@@ -162,14 +153,18 @@ Just send me a file and I'll handle the rest! 🚀
         if not base:
             await update.message.reply_text("Backend not configured (BACKEND_BASE_URL)")
             try:
-                analytics.capture(tg_distinct_id(update.effective_user.id), "command_status", {"backend_configured": False})
+                user = update.effective_user
+                self._identify_telegram_user(user)
+                analytics.capture(tg_distinct_id(user.id), "command_status", {"backend_configured": False})
             except Exception:
                 pass
             return
         # Minimal status endpoint, for now just say it's running
         await update.message.reply_text("Backend reachable. If connected, you'll receive recordings here after meetings.")
         try:
-            analytics.capture(tg_distinct_id(update.effective_user.id), "command_status", {"backend_configured": True})
+            user = update.effective_user
+            self._identify_telegram_user(user)
+            analytics.capture(tg_distinct_id(user.id), "command_status", {"backend_configured": True})
         except Exception:
             pass
 
@@ -178,7 +173,9 @@ Just send me a file and I'll handle the rest! 🚀
         await update.message.reply_text(
             "To disconnect: open your Zoom Marketplace, uninstall the app. We'll remove your tokens automatically.")
         try:
-            analytics.capture(tg_distinct_id(update.effective_user.id), "command_disconnect_zoom")
+            user = update.effective_user
+            self._identify_telegram_user(user)
+            analytics.capture(tg_distinct_id(user.id), "command_disconnect_zoom")
         except Exception:
             pass
 
@@ -188,7 +185,9 @@ Just send me a file and I'll handle the rest! 🚀
         """Handle the /help command."""
         await self.start_command(update, context)
         try:
-            analytics.capture(tg_distinct_id(update.effective_user.id), "command_help")
+            user = update.effective_user
+            self._identify_telegram_user(user)
+            analytics.capture(tg_distinct_id(user.id), "command_help")
         except Exception:
             pass
 
@@ -198,6 +197,11 @@ Just send me a file and I'll handle the rest! 🚀
         """Handle the /diagram command."""
         user_id = update.effective_user.id
         distinct_id = tg_distinct_id(user_id)
+        # Identify user even if they didn't run /start
+        try:
+            self._identify_telegram_user(update.effective_user)
+        except Exception:
+            pass
         
         # Check if this is a reply to a message
         if not update.message.reply_to_message:
@@ -401,6 +405,7 @@ Just send me a file and I'll handle the rest! 🚀
             
         logger.info(f"User {user_id} asked question about transcript: {question[:100]}")
         try:
+            self._identify_telegram_user(update.effective_user)
             analytics.capture(distinct_id, "transcript_question_received", {"question_len": len(question or "")})
         except Exception:
             pass
@@ -547,6 +552,11 @@ Just send me a file and I'll handle the rest! 🚀
         """Handle file uploads (documents, audio, video) with large file support up to 2GB."""
         user_id = update.effective_user.id
         distinct_id = tg_distinct_id(user_id)
+        # Identify user even if they didn't run /start
+        try:
+            self._identify_telegram_user(update.effective_user)
+        except Exception:
+            pass
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
 
@@ -998,6 +1008,26 @@ Just send me a file and I'll handle the rest! 🚀
             chunks.append(current_chunk.rstrip())
 
         return chunks
+
+    def _identify_telegram_user(self, user) -> None:
+        """Send user identity and metadata to analytics (PostHog)."""
+        try:
+            distinct_id = tg_distinct_id(user.id)
+            analytics.identify(
+                distinct_id,
+                {
+                    "platform": "telegram",
+                    "telegram_id": user.id,
+                    "username": getattr(user, "username", None),
+                    "first_name": getattr(user, "first_name", None),
+                    "last_name": getattr(user, "last_name", None),
+                    "language_code": getattr(user, "language_code", None),
+                    "is_bot": getattr(user, "is_bot", None),
+                    "is_premium": getattr(user, "is_premium", None),
+                },
+            )
+        except Exception:
+            pass
 
     def setup_handlers(self, application: Application) -> None:
         """Set up all command and message handlers."""

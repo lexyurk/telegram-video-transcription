@@ -15,6 +15,11 @@ try:
 except Exception:  # pragma: no cover - library may be missing locally
     _PosthogClient = None  # type: ignore
 
+try:
+    import httpx  # type: ignore
+except Exception:  # pragma: no cover
+    httpx = None  # type: ignore
+
 
 def tg_distinct_id(telegram_user_id: int | str) -> str:
     return f"tg:{telegram_user_id}"
@@ -26,55 +31,119 @@ def zoom_distinct_id(zoom_user_id: str) -> str:
 
 class Analytics:
     def __init__(self, api_key: Optional[str], host: Optional[str]) -> None:
-        self.enabled = bool(api_key and api_key.strip() and _PosthogClient is not None)
+        # Enable when API key is present. Prefer official client if available; otherwise, use HTTP fallback.
+        self.api_key = (api_key or "").strip()
+        self.host = (host or os.getenv("POSTHOG_HOST") or "https://app.posthog.com").strip()
+        self.enabled = bool(self.api_key)
         self._client: Optional[_PosthogClient] = None
-        if self.enabled:
+        self._http_client: Optional["httpx.Client"] = None  # type: ignore[name-defined]
+
+        if not self.enabled:
+            return
+
+        if _PosthogClient is not None:
             try:
-                # Default to PostHog Cloud host if not provided
-                resolved_host = (host or os.getenv("POSTHOG_HOST") or "https://app.posthog.com").strip()
-                self._client = _PosthogClient(api_key.strip(), host=resolved_host, gzip=True)  # type: ignore[call-arg]
+                self._client = _PosthogClient(self.api_key, host=self.host, gzip=True)  # type: ignore[call-arg]
                 atexit.register(self.flush)
             except Exception:
-                # Disable analytics if initialization fails
-                self.enabled = False
                 self._client = None
+        if self._client is None and httpx is not None:
+            try:
+                # Keep a small, shared HTTP client for efficiency
+                self._http_client = httpx.Client(timeout=5.0)
+                atexit.register(self.flush)
+            except Exception:
+                self._http_client = None
 
     def identify(self, distinct_id: str, properties: Optional[Dict[str, Any]] = None) -> None:
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return
-        try:
-            self._client.identify(distinct_id, properties or {})
-        except Exception:
-            pass
+        if self._client is not None:
+            try:
+                self._client.identify(distinct_id, properties or {})
+            except Exception:
+                pass
+            return
+        # HTTP fallback
+        if self._http_client is not None:
+            try:
+                payload = {
+                    "api_key": self.api_key,
+                    "event": "$identify",
+                    "distinct_id": distinct_id,
+                    "properties": {"$set": properties or {}},
+                }
+                self._http_client.post(self._capture_url(), json=payload)
+            except Exception:
+                pass
 
     def capture(self, distinct_id: str, event: str, properties: Optional[Dict[str, Any]] = None) -> None:
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return
-        try:
-            self._client.capture(distinct_id, event, properties or {})
-        except Exception:
-            pass
+        if self._client is not None:
+            try:
+                self._client.capture(distinct_id, event, properties or {})
+            except Exception:
+                pass
+            return
+        # HTTP fallback
+        if self._http_client is not None:
+            try:
+                payload = {
+                    "api_key": self.api_key,
+                    "event": event,
+                    "distinct_id": distinct_id,
+                    "properties": properties or {},
+                }
+                self._http_client.post(self._capture_url(), json=payload)
+            except Exception:
+                pass
 
     def alias(self, primary_distinct_id: str, secondary_distinct_id: str) -> None:
         """
         Merge identities so both IDs represent the same user.
         """
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return
-        try:
-            # PostHog's alias links two IDs. Order isn't critical for merging,
-            # we pass both explicitly for clarity.
-            self._client.alias(primary_distinct_id, secondary_distinct_id)
-        except Exception:
-            pass
+        if self._client is not None:
+            try:
+                # PostHog's alias links two IDs. Order isn't critical for merging,
+                # we pass both explicitly for clarity.
+                self._client.alias(primary_distinct_id, secondary_distinct_id)
+            except Exception:
+                pass
+            return
+        # HTTP fallback via $create_alias
+        if self._http_client is not None:
+            try:
+                payload = {
+                    "api_key": self.api_key,
+                    "event": "$create_alias",
+                    "distinct_id": primary_distinct_id,
+                    "properties": {"alias": secondary_distinct_id, "distinct_id": primary_distinct_id},
+                }
+                self._http_client.post(self._capture_url(), json=payload)
+            except Exception:
+                pass
 
     def flush(self) -> None:
-        if not self.enabled or not self._client:
+        if not self.enabled:
             return
-        try:
-            self._client.flush()
-        except Exception:
-            pass
+        if self._client is not None:
+            try:
+                self._client.flush()
+            except Exception:
+                pass
+        if self._http_client is not None:
+            try:
+                self._http_client.close()
+            except Exception:
+                pass
+
+    def _capture_url(self) -> str:
+        # Ensure single trailing slash
+        base = self.host.rstrip("/")
+        return f"{base}/capture/"
 
 
 # Lazy settings import to avoid circulars at module import time

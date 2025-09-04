@@ -27,6 +27,7 @@ RUN pip install uv
 COPY pyproject.toml ./
 COPY uv.lock ./
 COPY README.md ./
+COPY analytics.py ./
 COPY telegram_bot/ ./telegram_bot/
 COPY zoom_backend/ ./zoom_backend/
 COPY main.py ./

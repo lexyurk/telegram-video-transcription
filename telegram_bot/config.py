@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     backend_base_url: str = Field(default="", alias="BACKEND_BASE_URL")
     zoom_db_path: str = Field(default="./temp/zoom_integration.sqlite3", alias="ZOOM_DB_PATH")
 
+    # PostHog analytics
+    posthog_api_key: str = Field(default="", alias="POSTHOG_API_KEY")
+    posthog_host: str = Field(default="https://app.posthog.com", alias="POSTHOG_HOST")
+
 
 def get_settings() -> Settings:
     """Get settings instance."""

@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from loguru import logger
 
 from telegram_bot.config import get_settings
+from analytics import analytics, zoom_distinct_id, tg_distinct_id
 from telegram_bot.services.transcription_service import TranscriptionService
 from telegram_bot.services.summarization_service import SummarizationService
 from telegram_bot.services.speaker_identification_service import SpeakerIdentificationService
@@ -101,6 +102,14 @@ async def zoom_callback(code: str, state: str) -> PlainTextResponse:
     with get_conn(settings.zoom_db_path) as conn:
         user_id = upsert_user(conn, int(s["uid"]), int(s["chat_id"]))
         save_connection(conn, zoom_user["id"], user_id, tokens, email=zoom_user.get("email"))
+    try:
+        # Link Zoom and Telegram identities in analytics
+        analytics.identify(zoom_distinct_id(zoom_user["id"]), {"platform": "zoom", "email": zoom_user.get("email")})
+        analytics.identify(tg_distinct_id(int(s["uid"])), {"platform": "telegram"})
+        analytics.alias(tg_distinct_id(int(s["uid"])), zoom_distinct_id(zoom_user["id"]))
+        analytics.capture(tg_distinct_id(int(s["uid"])), "zoom_connected", {"zoom_user_id": zoom_user.get("id")})
+    except Exception:
+        pass
 
     return PlainTextResponse("Zoom connected! You can close this window.")
 
@@ -181,6 +190,10 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
                     f.get("download_url"),
                 )
         if not chat_id:
+            try:
+                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_event_unlinked", {"event": event})
+            except Exception:
+                pass
             return JSONResponse({"ok": True})
 
         # Enqueue background processing to respond fast to Zoom
@@ -193,6 +206,10 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
             obj.get("topic"),
             obj.get("start_time"),
         )
+        try:
+            analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_event_received", {"event": event})
+        except Exception:
+            pass
         return JSONResponse({"ok": True})
 
     return JSONResponse({"ok": True})
@@ -581,6 +598,10 @@ async def process_recording(
     audio = next((f for f in files if f.get("recording_type") == "audio_only"), None) or files[0]
     token = data.get("download_access_token") or access_token
     path = await download_audio(audio["download_url"], token)
+    try:
+        analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_audio_downloaded", {"meeting_uuid": meeting_uuid})
+    except Exception:
+        pass
 
     caption = f"✅ Zoom recording processed\nTopic: {data.get('topic','')}\nStart: {data.get('start_time','')}"
     await send_telegram_audio(chat_id, path, caption)
@@ -594,6 +615,10 @@ async def process_recording(
 
         transcript, diar_segments = await transcription_service.transcribe_with_segments(path)
         if transcript:
+            try:
+                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_transcribed", {"chars": len(transcript or "")})
+            except Exception:
+                pass
             # Try Zoom cloud transcript alignment first (retry briefly if transcript not ready yet)
             aligned_mapping: Dict[str, str] = {}
             try:
@@ -687,11 +712,23 @@ async def process_recording(
             summary = await summarization_service.create_summary_with_action_points(transcript)
             if summary:
                 await send_long_message(chat_id, f"📋 *Summary & Action Points*\n\n{summary}")
+                try:
+                    analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_summary_succeeded", {"chars": len(summary or "")})
+                except Exception:
+                    pass
         else:
             await send_message(chat_id, "⚠️ Could not create transcript from Zoom recording.")
+            try:
+                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_transcription_failed")
+            except Exception:
+                pass
     except Exception as e:
         # Best-effort; continue even if summarization fails
         await send_message(chat_id, f"⚠️ Post-processing error: {e}")
+        try:
+            analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_processing_error", {"error": str(e)[:200]})
+        except Exception:
+            pass
 
 
 async def send_telegram_audio(chat_id: int, path: str, caption: str) -> None:

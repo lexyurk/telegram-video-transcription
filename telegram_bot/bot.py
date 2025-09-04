@@ -25,6 +25,7 @@ from telegram_bot.services import (
     QuestionAnsweringService,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
+from analytics import analytics, tg_distinct_id
 
 
 class TelegramTranscriptionBot:
@@ -99,6 +100,31 @@ Just send me a file and I'll handle the rest! 🚀
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
         logger.info(f"User {update.effective_user.id} started the bot")
 
+        # Analytics: identify and capture command usage
+        try:
+            user = update.effective_user
+            distinct_id = tg_distinct_id(user.id)
+            analytics.identify(
+                distinct_id,
+                {
+                    "platform": "telegram",
+                    "username": getattr(user, "username", None),
+                    "first_name": getattr(user, "first_name", None),
+                    "last_name": getattr(user, "last_name", None),
+                    "language_code": getattr(user, "language_code", None),
+                    "is_bot": getattr(user, "is_bot", None),
+                },
+            )
+            analytics.capture(
+                distinct_id,
+                "command_start",
+                {
+                    "ai_provider": ai_provider,
+                },
+            )
+        except Exception:
+            pass
+
     async def connect_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Provide Zoom OAuth link to connect account."""
         settings = get_settings()
@@ -119,6 +145,15 @@ Just send me a file and I'll handle the rest! 🚀
             reply_markup=InlineKeyboardMarkup(keyboard),
             disable_web_page_preview=True,
         )
+        try:
+            user = update.effective_user
+            analytics.capture(
+                tg_distinct_id(user.id),
+                "command_connect_zoom",
+                {"backend_base_url_configured": bool(base)},
+            )
+        except Exception:
+            pass
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Check Zoom connection status (best-effort)."""
@@ -126,26 +161,43 @@ Just send me a file and I'll handle the rest! 🚀
         base = settings.backend_base_url or ""
         if not base:
             await update.message.reply_text("Backend not configured (BACKEND_BASE_URL)")
+            try:
+                analytics.capture(tg_distinct_id(update.effective_user.id), "command_status", {"backend_configured": False})
+            except Exception:
+                pass
             return
         # Minimal status endpoint, for now just say it's running
         await update.message.reply_text("Backend reachable. If connected, you'll receive recordings here after meetings.")
+        try:
+            analytics.capture(tg_distinct_id(update.effective_user.id), "command_status", {"backend_configured": True})
+        except Exception:
+            pass
 
     async def disconnect_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Explain how to disconnect (through Zoom app uninstall)."""
         await update.message.reply_text(
             "To disconnect: open your Zoom Marketplace, uninstall the app. We'll remove your tokens automatically.")
+        try:
+            analytics.capture(tg_distinct_id(update.effective_user.id), "command_disconnect_zoom")
+        except Exception:
+            pass
 
     async def help_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle the /help command."""
         await self.start_command(update, context)
+        try:
+            analytics.capture(tg_distinct_id(update.effective_user.id), "command_help")
+        except Exception:
+            pass
 
     async def diagram_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle the /diagram command."""
         user_id = update.effective_user.id
+        distinct_id = tg_distinct_id(user_id)
         
         # Check if this is a reply to a message
         if not update.message.reply_to_message:
@@ -161,6 +213,10 @@ Just send me a file and I'll handle the rest! 🚀
                 "The diagram will be generated based on the transcript content! 🎨",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "diagram_usage_help_shown")
+            except Exception:
+                pass
             return
 
         replied_message = update.message.reply_to_message
@@ -173,6 +229,10 @@ Just send me a file and I'll handle the rest! 🚀
                 "Reply to a transcript file with `/diagram` to create a diagram!",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "diagram_error_no_document")
+            except Exception:
+                pass
             return
         
         # Check if it's a .txt file (transcript)
@@ -183,12 +243,20 @@ Just send me a file and I'll handle the rest! 🚀
                 "Reply to a transcript file with `/diagram` to create a diagram!",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "diagram_error_not_txt", {"file_name": replied_message.document.file_name})
+            except Exception:
+                pass
             return
         
         # Extract custom prompt if provided
         custom_prompt = None
         if context.args:
             custom_prompt = ' '.join(context.args)
+        try:
+            analytics.capture(distinct_id, "diagram_requested", {"has_custom_prompt": bool(custom_prompt)})
+        except Exception:
+            pass
         
         # Send processing message
         processing_msg = await update.message.reply_text(
@@ -222,6 +290,10 @@ Just send me a file and I'll handle the rest! 🚀
                     "The transcript file appears to be empty. Please try with a different file.",
                     parse_mode="Markdown",
                 )
+                try:
+                    analytics.capture(distinct_id, "diagram_error_empty_transcript")
+                except Exception:
+                    pass
                 return
             
             # Update processing message
@@ -247,6 +319,10 @@ Just send me a file and I'll handle the rest! 🚀
                     "Please try again or use a different transcript.",
                     parse_mode="Markdown",
                 )
+                try:
+                    analytics.capture(distinct_id, "diagram_failed")
+                except Exception:
+                    pass
                 return
             
             temp_files_to_cleanup.append(diagram_path)
@@ -273,6 +349,10 @@ Just send me a file and I'll handle the rest! 🚀
             )
             
             logger.info(f"Successfully created diagram for user {user_id}")
+            try:
+                analytics.capture(distinct_id, "diagram_succeeded")
+            except Exception:
+                pass
             
         except Exception as e:
             logger.error(f"Error creating diagram for user {user_id}: {e}", exc_info=True)
@@ -282,6 +362,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"Please try again with a different transcript.",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "diagram_error", {"error": str(e)[:200]})
+            except Exception:
+                pass
         finally:
             # Cleanup all temporary files
             for temp_file in temp_files_to_cleanup:
@@ -297,6 +381,7 @@ Just send me a file and I'll handle the rest! 🚀
     ) -> None:
         """Handle questions about transcript files when user replies to a transcript."""
         user_id = update.effective_user.id
+        distinct_id = tg_distinct_id(user_id)
         question = update.message.text
         
         # Check if this is a reply to a message
@@ -315,6 +400,10 @@ Just send me a file and I'll handle the rest! 🚀
             return  # Not a transcript file
             
         logger.info(f"User {user_id} asked question about transcript: {question[:100]}")
+        try:
+            analytics.capture(distinct_id, "transcript_question_received", {"question_len": len(question or "")})
+        except Exception:
+            pass
         
         # Send processing message
         processing_msg = await update.message.reply_text(
@@ -373,6 +462,10 @@ Just send me a file and I'll handle the rest! 🚀
                     "Please try rephrasing your question or try again later.",
                     parse_mode="Markdown",
                 )
+                try:
+                    analytics.capture(distinct_id, "transcript_question_failed")
+                except Exception:
+                    pass
                 return
             
             # Prepare the answer message
@@ -421,6 +514,10 @@ Just send me a file and I'll handle the rest! 🚀
                         )
             
             logger.info(f"Successfully answered question for user {user_id}")
+            try:
+                analytics.capture(distinct_id, "transcript_question_answered", {"answer_len": len(answer or "")})
+            except Exception:
+                pass
             
         except Exception as e:
             logger.error(f"Error answering transcript question for user {user_id}: {e}", exc_info=True)
@@ -430,6 +527,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"Please try again or rephrase your question.",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "transcript_question_error", {"error": str(e)[:200]})
+            except Exception:
+                pass
         finally:
             # Cleanup all temporary files
             for temp_file in temp_files_to_cleanup:
@@ -445,6 +546,7 @@ Just send me a file and I'll handle the rest! 🚀
     ) -> None:
         """Handle file uploads (documents, audio, video) with large file support up to 2GB."""
         user_id = update.effective_user.id
+        distinct_id = tg_distinct_id(user_id)
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
 
@@ -484,10 +586,33 @@ Just send me a file and I'll handle the rest! 🚀
                 "❌ No supported file found! Please send a video or audio file.",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "file_not_found_in_message")
+            except Exception:
+                pass
             return
 
         logger.info(f"User {user_id} uploaded file: {file_name}")
         logger.debug(f"File details - Name: {file_name}, Size: {file_size}, ID: {file_id}")
+        try:
+            analytics.capture(
+                distinct_id,
+                "file_received",
+                {
+                    "file_name": file_name,
+                    "file_size": int(file_size or 0),
+                    "message_kind": (
+                        "document" if update.message.document else
+                        "audio" if update.message.audio else
+                        "video" if update.message.video else
+                        "voice" if update.message.voice else
+                        "video_note" if update.message.video_note else
+                        "unknown"
+                    ),
+                },
+            )
+        except Exception:
+            pass
 
         # Check file type first
         if not self._is_supported_file_type(file_name):
@@ -499,6 +624,10 @@ Just send me a file and I'll handle the rest! 🚀
                 "• Voice messages and video notes are also supported!",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "file_unsupported", {"file_name": file_name})
+            except Exception:
+                pass
             return
 
         # Check file size 
@@ -510,6 +639,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"Please try uploading the file again.",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "file_size_unknown", {"file_name": file_name})
+            except Exception:
+                pass
             return
             
         file_size_mb = file_size / (1024 * 1024)
@@ -527,6 +660,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"Then send the smaller file and I'll transcribe it! 🚀",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "file_too_large", {"file_size_mb": float(file_size_mb)})
+            except Exception:
+                pass
             return
 
         # Send processing message
@@ -583,6 +720,10 @@ Just send me a file and I'll handle the rest! 🚀
                 
             temp_files_to_cleanup.append(temp_file_path)
             logger.info(f"Downloaded {file_size_mb:.1f}MB file via MTProto")
+            try:
+                analytics.capture(distinct_id, "download_succeeded", {"file_size_mb": float(file_size_mb)})
+            except Exception:
+                pass
 
             # Start transcription
             await processing_msg.edit_text(
@@ -591,6 +732,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"🎙️ Transcribing...",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "transcription_started", {"file_size_mb": float(file_size_mb)})
+            except Exception:
+                pass
 
             # Transcribe the file
             transcript = await self.transcription_service.transcribe_file(temp_file_path)
@@ -602,6 +747,10 @@ Just send me a file and I'll handle the rest! 🚀
                     f"Please try with a different file.",
                     parse_mode="Markdown",
                 )
+                try:
+                    analytics.capture(distinct_id, "transcription_failed")
+                except Exception:
+                    pass
                 return
 
             # Update progress for speaker identification
@@ -643,6 +792,10 @@ Just send me a file and I'll handle the rest! 🚀
                     f"From: {escaped_file_name}",
                     parse_mode="Markdown",
                 )
+            try:
+                analytics.capture(distinct_id, "transcription_succeeded", {"transcript_chars": len(transcript or "")})
+            except Exception:
+                pass
 
             # Create summary
             summary = await self.summarization_service.create_summary_with_action_points(
@@ -710,6 +863,10 @@ Just send me a file and I'll handle the rest! 🚀
                         f"✅ {escaped_file_name} processed successfully!\n\n"
                         f"📄 Transcript and summary are ready above.",
                     )
+                try:
+                    analytics.capture(distinct_id, "summary_succeeded", {"summary_chars": len(summary or "")})
+                except Exception:
+                    pass
             else:
                 await processing_msg.edit_text(
                     f"✅ **{escaped_file_name} transcribed!**\n\n"
@@ -717,6 +874,10 @@ Just send me a file and I'll handle the rest! 🚀
                     f"⚠️ Summary generation failed, but you have the full transcript.",
                     parse_mode="Markdown",
                 )
+                try:
+                    analytics.capture(distinct_id, "summary_failed")
+                except Exception:
+                    pass
 
             logger.info(
                 f"Successfully processed {file_size_mb:.1f}MB file for user {user_id}"
@@ -730,6 +891,10 @@ Just send me a file and I'll handle the rest! 🚀
                 f"Please try again with a different file.",
                 parse_mode="Markdown",
             )
+            try:
+                analytics.capture(distinct_id, "processing_error", {"error": str(e)[:200]})
+            except Exception:
+                pass
         finally:
             # Cleanup all temporary files
             for temp_file in temp_files_to_cleanup:

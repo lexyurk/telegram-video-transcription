@@ -12,10 +12,12 @@ from posthog import Posthog as _PosthogClient
 
 
 def tg_distinct_id(telegram_user_id: int | str) -> str:
-    return f"tg:{telegram_user_id}"
+    """Use telegram ID directly as distinct_id since Zoom accounts are linked to Telegram."""
+    return str(telegram_user_id)
 
 
 def zoom_distinct_id(zoom_user_id: str) -> str:
+    """Legacy function - keep for backward compatibility but prefer using tg_distinct_id."""
     return f"zoom:{zoom_user_id}"
 
 

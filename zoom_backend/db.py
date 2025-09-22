@@ -138,6 +138,20 @@ def get_chat_id_for_zoom_user(conn: sqlite3.Connection, zoom_user_id: str) -> Op
     return int(row[0]) if row else None
 
 
+def get_telegram_user_id_for_zoom_user(conn: sqlite3.Connection, zoom_user_id: str) -> Optional[int]:
+    """Get the telegram_user_id associated with a zoom_user_id."""
+    cur = conn.execute(
+        """
+        SELECT users.telegram_user_id FROM zoom_connections
+        JOIN users ON users.id = zoom_connections.user_id
+        WHERE zoom_connections.zoom_user_id = ?
+        """,
+        (zoom_user_id,),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
 def delete_connection(conn: sqlite3.Connection, zoom_user_id: str) -> None:
     conn.execute("DELETE FROM zoom_connections WHERE zoom_user_id = ?", (zoom_user_id,))
 

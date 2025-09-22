@@ -27,6 +27,7 @@ from zoom_backend.db import (
     upsert_user,
     save_connection,
     get_chat_id_for_zoom_user,
+    get_telegram_user_id_for_zoom_user,
     get_connection_by_zoom_user_id,
     delete_connection,
     upsert_meeting,
@@ -103,11 +104,14 @@ async def zoom_callback(code: str, state: str) -> PlainTextResponse:
         user_id = upsert_user(conn, int(s["uid"]), int(s["chat_id"]))
         save_connection(conn, zoom_user["id"], user_id, tokens, email=zoom_user.get("email"))
     try:
-        # Link Zoom and Telegram identities in analytics
-        analytics.identify(zoom_distinct_id(zoom_user["id"]), {"platform": "zoom", "email": zoom_user.get("email")})
-        analytics.identify(tg_distinct_id(int(s["uid"])), {"platform": "telegram"})
-        analytics.alias(tg_distinct_id(int(s["uid"])), zoom_distinct_id(zoom_user["id"]))
-        analytics.capture(tg_distinct_id(int(s["uid"])), "zoom_connected", {"zoom_user_id": zoom_user.get("id")})
+        # Use Telegram ID as primary identifier, add Zoom info as properties
+        telegram_user_id = int(s["uid"])
+        analytics.identify(tg_distinct_id(telegram_user_id), {
+            "platform": "telegram",
+            "zoom_user_id": zoom_user.get("id"),
+            "zoom_email": zoom_user.get("email")
+        })
+        analytics.capture(tg_distinct_id(telegram_user_id), "zoom_connected", {"zoom_user_id": zoom_user.get("id")})
     except Exception:
         pass
 
@@ -168,9 +172,10 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
         meeting_uuid = obj["uuid"]
         logger.info("{}: host_id={}, uuid_prefix={}...", event, zoom_user_id, str(meeting_uuid)[:10])
 
-        # Look up chat_id
+        # Look up chat_id and telegram_user_id
         with get_conn(settings.zoom_db_path) as conn:
             chat_id = get_chat_id_for_zoom_user(conn, zoom_user_id)
+            telegram_user_id = get_telegram_user_id_for_zoom_user(conn, zoom_user_id)
             # upsert meeting and recording rows for idempotency
             meeting_id = upsert_meeting(
                 conn,
@@ -191,7 +196,9 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
                 )
         if not chat_id:
             try:
-                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_event_unlinked", {"event": event})
+                # Use Telegram ID if available, fallback to zoom_distinct_id for backward compatibility
+                distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+                analytics.capture(distinct_id, "zoom_recording_event_unlinked", {"event": event})
             except Exception:
                 pass
             return JSONResponse({"ok": True})
@@ -205,9 +212,12 @@ async def zoom_webhook(request: Request, background_tasks: BackgroundTasks):
             obj.get("recording_files", []),
             obj.get("topic"),
             obj.get("start_time"),
+            telegram_user_id,  # Pass telegram_user_id to background task
         )
         try:
-            analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_event_received", {"event": event})
+            # Use Telegram ID if available, fallback to zoom_distinct_id for backward compatibility
+            distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+            analytics.capture(distinct_id, "zoom_recording_event_received", {"event": event})
         except Exception:
             pass
         return JSONResponse({"ok": True})
@@ -222,6 +232,7 @@ async def process_recording(
     recording_files_from_event: Optional[list] = None,
     topic: Optional[str] = None,
     start_time: Optional[str] = None,
+    telegram_user_id: Optional[int] = None,
 ) -> None:
     settings = get_settings()
     # get fresh tokens (no refresh implemented yet)
@@ -599,7 +610,9 @@ async def process_recording(
     token = data.get("download_access_token") or access_token
     path = await download_audio(audio["download_url"], token)
     try:
-        analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_audio_downloaded", {"meeting_uuid": meeting_uuid})
+        # Use Telegram ID if available, fallback to zoom_distinct_id for backward compatibility
+        distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+        analytics.capture(distinct_id, "zoom_recording_audio_downloaded", {"meeting_uuid": meeting_uuid})
     except Exception:
         pass
 
@@ -616,7 +629,8 @@ async def process_recording(
         transcript, diar_segments = await transcription_service.transcribe_with_segments(path)
         if transcript:
             try:
-                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_recording_transcribed", {"chars": len(transcript or "")})
+                distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+                analytics.capture(distinct_id, "zoom_recording_transcribed", {"chars": len(transcript or "")})
             except Exception:
                 pass
             # Try Zoom cloud transcript alignment first (retry briefly if transcript not ready yet)
@@ -713,20 +727,23 @@ async def process_recording(
             if summary:
                 await send_long_message(chat_id, f"📋 *Summary & Action Points*\n\n{summary}")
                 try:
-                    analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_summary_succeeded", {"chars": len(summary or "")})
+                    distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+                    analytics.capture(distinct_id, "zoom_summary_succeeded", {"chars": len(summary or "")})
                 except Exception:
                     pass
         else:
             await send_message(chat_id, "⚠️ Could not create transcript from Zoom recording.")
             try:
-                analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_transcription_failed")
+                distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+                analytics.capture(distinct_id, "zoom_transcription_failed")
             except Exception:
                 pass
     except Exception as e:
         # Best-effort; continue even if summarization fails
         await send_message(chat_id, f"⚠️ Post-processing error: {e}")
         try:
-            analytics.capture(zoom_distinct_id(zoom_user_id), "zoom_processing_error", {"error": str(e)[:200]})
+            distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
+            analytics.capture(distinct_id, "zoom_processing_error", {"error": str(e)[:200]})
         except Exception:
             pass
 

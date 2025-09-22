@@ -6,6 +6,7 @@ from .summarization_service import SummarizationService
 from .speaker_identification_service import SpeakerIdentificationService
 from .diagram_service import DiagramService
 from .question_answering_service import QuestionAnsweringService
+from .media_info_service import MediaInfoService
 
 __all__ = [
     "FileService",
@@ -14,4 +15,5 @@ __all__ = [
     "SpeakerIdentificationService",
     "DiagramService",
     "QuestionAnsweringService",
+    "MediaInfoService",
 ]

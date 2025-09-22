@@ -18,11 +18,12 @@ from telegram.ext import (
 from telegram_bot.config import get_settings
 from telegram_bot.services import (
     FileService,
-    TranscriptionService, 
+    TranscriptionService,
     SummarizationService,
     SpeakerIdentificationService,
     DiagramService,
     QuestionAnsweringService,
+    MediaInfoService,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 from analytics import analytics, tg_distinct_id
@@ -39,6 +40,7 @@ class TelegramTranscriptionBot:
         self.file_service = FileService()
         self.diagram_service = DiagramService()
         self.question_answering_service = QuestionAnsweringService()
+        self.media_info_service = MediaInfoService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -730,8 +732,32 @@ Just send me a file and I'll handle the rest! 🚀
                 
             temp_files_to_cleanup.append(temp_file_path)
             logger.info(f"Downloaded {file_size_mb:.1f}MB file via MTProto")
+
+            # Extract media duration
+            media_duration_seconds = None
+            media_duration_minutes = None
             try:
-                analytics.capture(distinct_id, "download_succeeded", {"file_size_mb": float(file_size_mb)})
+                media_info = await self.media_info_service.get_media_info(temp_file_path)
+                media_duration_seconds = media_info.get('duration_seconds')
+                media_duration_minutes = media_info.get('duration_minutes')
+
+                if media_duration_seconds:
+                    logger.info(f"Media duration: {media_duration_minutes:.2f} minutes ({media_duration_seconds:.0f} seconds)")
+                else:
+                    logger.warning("Could not extract media duration")
+            except Exception as e:
+                logger.warning(f"Failed to extract media info: {e}")
+
+            try:
+                analytics.capture(
+                    distinct_id,
+                    "download_succeeded",
+                    {
+                        "file_size_mb": float(file_size_mb),
+                        "duration_seconds": float(media_duration_seconds) if media_duration_seconds else None,
+                        "duration_minutes": float(media_duration_minutes) if media_duration_minutes else None,
+                    }
+                )
             except Exception:
                 pass
 
@@ -743,7 +769,15 @@ Just send me a file and I'll handle the rest! 🚀
                 parse_mode="Markdown",
             )
             try:
-                analytics.capture(distinct_id, "transcription_started", {"file_size_mb": float(file_size_mb)})
+                analytics.capture(
+                    distinct_id,
+                    "transcription_started",
+                    {
+                        "file_size_mb": float(file_size_mb),
+                        "duration_seconds": float(media_duration_seconds) if media_duration_seconds else None,
+                        "duration_minutes": float(media_duration_minutes) if media_duration_minutes else None,
+                    }
+                )
             except Exception:
                 pass
 
@@ -803,7 +837,15 @@ Just send me a file and I'll handle the rest! 🚀
                     parse_mode="Markdown",
                 )
             try:
-                analytics.capture(distinct_id, "transcription_succeeded", {"transcript_chars": len(transcript or "")})
+                analytics.capture(
+                    distinct_id,
+                    "transcription_succeeded",
+                    {
+                        "transcript_chars": len(transcript or ""),
+                        "duration_seconds": float(media_duration_seconds) if media_duration_seconds else None,
+                        "duration_minutes": float(media_duration_minutes) if media_duration_minutes else None,
+                    }
+                )
             except Exception:
                 pass
 
@@ -889,8 +931,9 @@ Just send me a file and I'll handle the rest! 🚀
                 except Exception:
                     pass
 
+            duration_str = f" ({media_duration_minutes:.2f} min)" if media_duration_minutes else ""
             logger.info(
-                f"Successfully processed {file_size_mb:.1f}MB file for user {user_id}"
+                f"Successfully processed {file_size_mb:.1f}MB file{duration_str} for user {user_id}"
             )
 
         except Exception as e:

@@ -1,10 +1,11 @@
 """Abstract AI model interface for different ML providers."""
 
+import json
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from anthropic import AsyncAnthropic
-from google import genai
+import google.generativeai as genai
 from loguru import logger
 
 from telegram_bot.config import get_settings, Settings
@@ -18,27 +19,66 @@ class AIModel(ABC):
         """Generate text response from the AI model."""
         pass
 
+    async def generate_json(
+        self,
+        prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Fallback JSON generation by parsing plain text output."""
+
+        text = await self.generate_text(prompt)
+        if not text:
+            return {}
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = "\n".join(line for line in cleaned.splitlines() if not line.startswith("```"))
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse JSON response from model")
+            return {}
+
 
 class GeminiModel(AIModel):
     """Google Gemini AI model implementation."""
 
     def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash") -> None:
         """Initialize Gemini model."""
-        self.client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
         self.model_name = model_name
+        self.model = genai.GenerativeModel(model_name=self.model_name)
         logger.info(f"Initialized Gemini model: {model_name}")
 
     async def generate_text(self, prompt: str) -> str | None:
         """Generate text using Gemini."""
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[prompt]
-            )
+            response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
             logger.error(f"Error generating text with Gemini: {e}")
             return None
+
+    async def generate_json(
+        self,
+        prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        try:
+            generation_config: Dict[str, Any] = {}
+            if response_schema:
+                generation_config["response_mime_type"] = "application/json"
+                generation_config["response_schema"] = response_schema
+            response = self.model.generate_content(
+                prompt,
+                generation_config=generation_config or None,
+            )
+            payload = response.text
+            if not payload:
+                return {}
+            return json.loads(payload)
+        except Exception as e:
+            logger.error(f"Error generating structured JSON with Gemini: {e}")
+            return await super().generate_json(prompt, response_schema)
 
 
 class ClaudeModel(AIModel):
@@ -63,6 +103,34 @@ class ClaudeModel(AIModel):
         except Exception as e:
             logger.error(f"Error generating text with Claude: {e}")
             return None
+
+    async def generate_json(
+        self,
+        prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        try:
+            kwargs: Dict[str, Any] = {}
+            if response_schema:
+                kwargs["response_format"] = {"type": "json_object", "schema": response_schema}
+            else:
+                kwargs["response_format"] = {"type": "json_object"}
+            message = await self.client.messages.create(
+                model=self.model_name,
+                max_tokens=4000,
+                temperature=0.1,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs,
+            )
+            if not message.content:
+                return {}
+            payload = message.content[0].text
+            if not payload:
+                return {}
+            return json.loads(payload)
+        except Exception as e:
+            logger.error(f"Error generating structured JSON with Claude: {e}")
+            return await super().generate_json(prompt, response_schema)
 
 
 def create_ai_model(settings: Optional[Settings] = None) -> AIModel:

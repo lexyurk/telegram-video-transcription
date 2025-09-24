@@ -123,27 +123,27 @@ class RAGIndexingService:
         return textwrap.dedent(
             f"""
             You are an expert meeting analyst. Analyze the following full meeting transcript and split it into coherent episodes.
-
-            Instructions:
-            - Each episode should focus on a project, topic, or major discussion theme.
-            - Even if a project is only named once, keep subsequent related discussion under the same episode until the topic clearly changes.
-            - When multiple projects are discussed sequentially, produce separate episodes in chronological order.
-            - Include neutral/general-business episodes if the discussion is not tied to a project.
-            - For each episode, capture:
-              * order (1-based)
-              * title (short human-friendly summary)
-              * summary (2-3 sentences)
-              * topics (list of keywords)
-              * projects (array of objects with alias, confidence 0-1, and supporting quote)
-              * start_anchor: quote the first sentence or distinctive phrase of the episode
-              * end_anchor: quote the last sentence or distinctive phrase of the episode
-              * confidence: overall confidence that the segmentation is correct (0-1)
-              * notes: optional clarifications or open questions
-            - Respond strictly as JSON with schema {"episodes": [ ... ]}.
-
-            Transcript:
-            {trimmed}
-            """
+ 
+             Instructions:
+             - Each episode should focus on a project, topic, or major discussion theme.
+             - Even if a project is only named once, keep subsequent related discussion under the same episode until the topic clearly changes.
+             - When multiple projects are discussed sequentially, produce separate episodes in chronological order.
+             - Include neutral/general-business episodes if the discussion is not tied to a project.
+             - For each episode, capture:
+               * order (1-based)
+               * title (short human-friendly summary)
+               * summary (2-3 sentences)
+               * topics (list of keywords)
+               * projects (array of objects with alias, confidence 0-1, and supporting quote)
+               * start_anchor: quote the first sentence or distinctive phrase of the episode
+               * end_anchor: quote the last sentence or distinctive phrase of the episode
+               * confidence: overall confidence that the segmentation is correct (0-1)
+               * notes: optional clarifications or open questions
+            - Respond strictly as JSON with schema {{"episodes": [ ... ]}}.
+ 
+             Transcript:
+             {trimmed}
+             """
         ).strip()
 
     def _parse_segmentation_response(self, response: str) -> List[EpisodePlanSegment]:
@@ -268,9 +268,14 @@ class RAGIndexingService:
     def ensure_namespace(self, user_id: int) -> None:
         """Ensure a collection exists for the user."""
         collection_name = self._collection_name(user_id)
-        if collection_name in [c.name for c in self.client.list_collections()]:
+        existing = [c.name for c in self.client.list_collections()]
+        if collection_name in existing:
             return
-        self.client.create_collection(name=collection_name, metadata={"user_id": str(user_id)})
+        self.client.create_collection(
+            name=collection_name,
+            metadata={"user_id": str(user_id)},
+            embedding_function=self.embedding_fn,
+        )
         logger.info("Created vector namespace for user {}", user_id)
 
     def delete_namespace(self, user_id: int) -> None:
@@ -291,7 +296,6 @@ class RAGIndexingService:
         self.ensure_namespace(user_id)
         collection = self.client.get_collection(
             name=self._collection_name(user_id),
-            embedding_function=self.embedding_fn,
         )
 
         ids = [chunk.chunk_id for chunk in chunks]
@@ -311,14 +315,35 @@ class RAGIndexingService:
             "episode_id": chunk.episode_id,
             "summary": chunk.summary,
             "project_affinity": json.dumps(chunk.project_affinity),
-            "topics": chunk.topics,
+            "topics": ",".join(chunk.topics),
         }
         metadata.update(chunk.metadata)
         if chunk.start_time is not None:
             metadata["start_time"] = chunk.start_time
         if chunk.end_time is not None:
             metadata["end_time"] = chunk.end_time
+
+        project_items = sorted(
+            (
+                (alias, float(score), self._normalize_alias(alias))
+                for alias, score in chunk.project_affinity.items()
+                if alias
+            ),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        if project_items:
+            top_alias, top_score, top_norm = project_items[0]
+            metadata["primary_project"] = top_alias
+            metadata["primary_project_norm"] = top_norm
+            metadata["primary_project_score"] = top_score
+            metadata["project_tags"] = ",".join(alias for alias, _, _ in project_items)
+            metadata["project_tags_norm"] = ",".join(norm for _, _, norm in project_items)
         return metadata
+
+    def _normalize_alias(self, alias: str) -> str:
+        cleaned = re.sub(r"[^a-z0-9]+", "_", alias.lower())
+        return cleaned.strip("_")
 
     async def label_episode_projects(self, text: str) -> Dict[str, float]:
         """Use LLM to label project affinity for an episode."""

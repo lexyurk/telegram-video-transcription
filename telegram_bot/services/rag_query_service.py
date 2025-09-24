@@ -72,12 +72,19 @@ class RAGQueryService:
     def _build_filter(self, intent: ParsedIntent) -> Dict[str, Any] | None:
         filters: Dict[str, Any] = {}
 
-        project_ids = [project.get("alias") for project in intent.projects if project.get("confidence", 0) >= 0.6]
+        project_ids = [
+            project.get("alias")
+            for project in intent.projects
+            if project.get("confidence", 0) >= 0.6 and project.get("alias")
+        ]
         if project_ids:
-            filters["project_affinity"] = {"$contains": project_ids}
+            filters["project_tags"] = {
+                "$in": project_ids,
+            }
 
         if intent.date_ranges:
-            filters["meeting_date"] = {"$in": [rng.get("start") for rng in intent.date_ranges if rng.get("start")]
+            filters["meeting_date"] = {
+                "$in": [rng.get("start") for rng in intent.date_ranges if rng.get("start")]
             }
 
         return filters or None
@@ -89,6 +96,7 @@ class RAGQueryService:
         documents: List[str],
         metadatas: List[Dict[str, Any]],
     ) -> str:
+        language_hint = self._infer_language(message)
         context_snippets = []
         for doc, meta in zip(documents, metadatas):
             project_affinity = meta.get("project_affinity")
@@ -101,19 +109,46 @@ class RAGQueryService:
                 "text": doc,
                 "summary": meta.get("summary"),
                 "meeting_date": meta.get("meeting_date"),
+                "meeting_id": meta.get("meeting_id"),
                 "participants": meta.get("participants"),
                 "project_affinity": project_affinity,
+                "project_tags": (meta.get("project_tags") or "").split(","),
+                "project_tags_norm": (meta.get("project_tags_norm") or "").split(","),
+                "primary_project": meta.get("primary_project"),
+                "primary_project_score": meta.get("primary_project_score"),
             }
             context_snippets.append(snippet)
 
         return json.dumps(
             {
-                "instruction": "Use the provided snippets to answer the user's question about their meetings. Cite meeting dates and highlight relevant projects.",
+                "instruction": (
+                    "You are assisting the user in searching their meeting transcripts. "
+                    "Always respond in the same language as `user_message` (language hint: "
+                    f"{language_hint}). Format strictly as follows:\n"
+                    "Цитаты:\n"
+                    "- \"<quote 1>\" — <speaker or 'Участник'> (<meeting_date>)\n"
+                    "- ... (add as many relevant quotes as needed)\n"
+                    "Резюме: <2-3 sentence synthesis based only on the quotes above>.\n"
+                    "Rules: Quotes must be exact sentences copied verbatim from `text`. Include the speaker name"
+                    " if it appears at the start of the quoted sentence (e.g., 'Sasha: ...'). If no speaker is"
+                    " present, label as 'Участник'. Always include the meeting_date in parentheses. If no relevant"
+                    " quotes exist, write `Цитаты: отсутствуют` and explain in the summary why. Never invent information"
+                    " that is not present in the provided snippets."
+                ),
                 "user_message": message,
                 "intent": intent.__dict__,
                 "snippets": context_snippets,
+                "user_language_hint": language_hint,
             },
             indent=2,
         )
+
+    def _infer_language(self, message: str) -> str:
+        """Very lightweight language hint used for prompting the LLM."""
+
+        for char in message:
+            if "а" <= char.lower() <= "я" or char in "ёЁ":
+                return "Russian"
+        return "English"
 
 

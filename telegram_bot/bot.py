@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 from datetime import datetime
+from typing import List, Dict
 
 from loguru import logger
 from telegram import Document, Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -1158,17 +1159,22 @@ Just send me a file and I'll handle the rest! 🚀
                         meeting_metadata=meeting_metadata,
                     )
                     if episodes:
-                        primary_projects = episodes[0].project_affinity
+                        aggregated_topics: List[str] = sorted({topic for ep in episodes for topic in ep.topics})
+                        aggregated_projects: Dict[str, float] = {}
+                        for episode_obj in episodes:
+                            for alias, score in episode_obj.project_affinity.items():
+                                aggregated_projects[alias] = max(aggregated_projects.get(alias, 0.0), score)
+
                         self.rag_storage_service.record_meeting(
                             meeting_id=meeting_id,
                             user_id=user_id,
                             chat_id=update.effective_chat.id,
                             meeting_date=meeting_metadata["meeting_date"],
                             title=escaped_file_name,
-                            topics=episodes[0].topics,
+                            topics=aggregated_topics,
                             metadata=meeting_metadata,
                         )
-                        self.rag_storage_service.upsert_projects(user_id, primary_projects)
+                        self.rag_storage_service.upsert_projects(user_id, aggregated_projects)
                 except Exception as exc:
                     logger.warning("RAG ingestion failed for user {}: {}", user_id, exc)
 

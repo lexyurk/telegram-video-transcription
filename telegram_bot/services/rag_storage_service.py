@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from loguru import logger
 
@@ -62,6 +62,13 @@ class RAGStorageService:
                     title TEXT,
                     topics TEXT,
                     metadata TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS rag_segmentation_cache (
+                    meeting_id TEXT PRIMARY KEY,
+                    transcript_hash TEXT,
+                    plan_json TEXT,
+                    updated_at TEXT
                 );
                 """
             )
@@ -128,6 +135,37 @@ class RAGStorageService:
                 (meeting_id, user_id, chat_id, meeting_date, title, json.dumps(topics), json.dumps(metadata)),
             )
         logger.debug("Recorded meeting {} for user {}", meeting_id, user_id)
+
+    def save_segmentation_plan(
+        self,
+        meeting_id: str,
+        transcript_hash: str,
+        plan: List[Dict[str, Any]],
+    ) -> None:
+        now = datetime.utcnow().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO rag_segmentation_cache(meeting_id, transcript_hash, plan_json, updated_at)
+                VALUES(?, ?, ?, ?)
+                """,
+                (meeting_id, transcript_hash, json.dumps(plan), now),
+            )
+        logger.debug("Cached segmentation plan for meeting {}", meeting_id)
+
+    def get_segmentation_plan(self, meeting_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "SELECT transcript_hash, plan_json FROM rag_segmentation_cache WHERE meeting_id=?",
+                (meeting_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "transcript_hash": row["transcript_hash"],
+                "segments": json.loads(row["plan_json"] or "[]"),
+            }
 
     def upsert_projects(self, user_id: int, projects: Dict[str, float]) -> None:
         if not projects:

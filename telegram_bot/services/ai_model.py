@@ -1,8 +1,7 @@
 """Abstract AI model interface for different ML providers."""
 
-import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from anthropic import AsyncAnthropic
 from google import genai
@@ -18,25 +17,6 @@ class AIModel(ABC):
     async def generate_text(self, prompt: str) -> str | None:
         """Generate text response from the AI model."""
         pass
-
-    async def generate_json(
-        self,
-        prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Fallback JSON generation via plain text response."""
-
-        text = await self.generate_text(prompt)
-        if not text:
-            return {}
-        cleaned = text.strip()
-        if cleaned.startswith("```"):
-            cleaned = "\n".join(line for line in cleaned.splitlines() if not line.startswith("```"))
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON response from model")
-            return {}
 
 
 class GeminiModel(AIModel):
@@ -59,33 +39,6 @@ class GeminiModel(AIModel):
         except Exception as e:
             logger.error(f"Error generating text with Gemini: {e}")
             return None
-
-    async def generate_json(
-        self,
-        prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        try:
-            kwargs: Dict[str, Any] = {}
-            if response_schema:
-                kwargs["response_schema"] = response_schema
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[prompt],
-                response_mime_type="application/json",
-                **kwargs,
-            )
-            payload = response.text
-            if not payload and response.candidates:
-                parts = response.candidates[0].content.parts
-                if parts:
-                    payload = parts[0].text
-            if not payload:
-                return {}
-            return json.loads(payload)
-        except Exception as e:
-            logger.error(f"Error generating structured JSON with Gemini: {e}")
-            return {}
 
 
 class ClaudeModel(AIModel):
@@ -110,34 +63,6 @@ class ClaudeModel(AIModel):
         except Exception as e:
             logger.error(f"Error generating text with Claude: {e}")
             return None
-
-    async def generate_json(
-        self,
-        prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        try:
-            kwargs: Dict[str, Any] = {}
-            if response_schema:
-                kwargs["response_format"] = {"type": "json_object", "schema": response_schema}
-            else:
-                kwargs["response_format"] = {"type": "json_object"}
-            message = await self.client.messages.create(
-                model=self.model_name,
-                max_tokens=4000,
-                temperature=0.1,
-                messages=[{"role": "user", "content": prompt}],
-                **kwargs,
-            )
-            if not message.content:
-                return {}
-            payload = message.content[0].text
-            if not payload:
-                return {}
-            return json.loads(payload)
-        except Exception as e:
-            logger.error(f"Error generating structured JSON with Claude: {e}")
-            return {}
 
 
 def create_ai_model(settings: Optional[Settings] = None) -> AIModel:

@@ -41,7 +41,39 @@ class RAGIntentParser:
 
         logger.debug("Parsing RAG intent for message: {}", message[:200])
 
-        response = await self.ai_model.generate_text(prompt)
+        response = await self.ai_model.generate_json(
+            prompt,
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "intent": {"type": "string"},
+                    "projects": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "alias": {"type": "string"},
+                                "confidence": {"type": "number"},
+                            },
+                        },
+                    },
+                    "date_ranges": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "start": {"type": "string"},
+                                "end": {"type": "string"},
+                            },
+                        },
+                    },
+                    "topics": {"type": "array", "items": {"type": "string"}},
+                    "follow_up": {"type": "boolean"},
+                    "confidence": {"type": "number"},
+                    "uncertainty_reason": {"type": "string"},
+                },
+            },
+        )
 
         if not response:
             logger.warning("Intent parser returned empty response; using fallback")
@@ -56,15 +88,14 @@ class RAGIntentParser:
             )
 
         try:
-            data = self._extract_json(response)
             parsed = ParsedIntent(
-                intent=data.get("intent", "general_question"),
-                projects=data.get("projects", []),
-                date_ranges=data.get("date_ranges", []),
-                topics=data.get("topics", []),
-                follow_up=data.get("follow_up", False),
-                confidence=float(data.get("confidence", 0.0)),
-                uncertainty_reason=data.get("uncertainty_reason"),
+                intent=response.get("intent", "general_question"),
+                projects=response.get("projects", []),
+                date_ranges=response.get("date_ranges", []),
+                topics=response.get("topics", []),
+                follow_up=response.get("follow_up", False),
+                confidence=float(response.get("confidence", 0.0)),
+                uncertainty_reason=response.get("uncertainty_reason"),
             )
             logger.debug("Parsed intent: {}", parsed)
             return parsed
@@ -88,19 +119,22 @@ class RAGIntentParser:
         previous_section = f"Previous intent JSON: {previous}\n" if previous else ""
 
         return (
-            "You are an intent classification assistant for a meeting knowledge base.\n"
-            "Your job is to take a Telegram message and convert it into a strict JSON object with this schema:\n\n"
+            "You are an intent classification assistant for a meeting knowledge base."
+            " Your job is to take a Telegram message and convert it into a structured representation."
+            " Output must conform to the provided JSON schema."
+            "\n\nSchema:\n"
             "{\n"
-            "  \"intent\": \"project_summary\" | \"date_summary\" | \"general_question\" | \"action_items\" | \"topics_overview\" | \"clarification_needed\",\n"
-            "  \"projects\": [{\"alias\": string, \"confidence\": float}],\n"
-            "  \"date_ranges\": [{\"start\": ISO8601/date expression, \"end\": ISO8601/date expression}],\n"
-            "  \"topics\": [string],\n"
-            "  \"follow_up\": bool,\n"
-            "  \"confidence\": float between 0 and 1,\n"
+            "  \"intent\": string,\n"
+            "  \"projects\": array of objects with properties:\n"
+            "    {\"alias\": string, \"confidence\": number},\n"
+            "  \"date_ranges\": array of objects with properties:\n"
+            "    {\"start\": string, \"end\": string},\n"
+            "  \"topics\": array of strings,\n"
+            "  \"follow_up\": boolean,\n"
+            "  \"confidence\": number,\n"
             "  \"uncertainty_reason\": string | null\n"
             "}\n\n"
             "Rules:\n"
-            "- Always return valid JSON only. No markdown, no commentary.\n"
             "- Extract project aliases even if referenced indirectly (\"our CRM project\" -> \"CRM\").\n"
             "- Detect relative dates and return normalized expressions (\"yesterday\", \"last Monday\").\n"
             "- If unsure about intent or projects, set \"confidence\" < 0.5 and explain via \"uncertainty_reason\".\n"
@@ -110,16 +144,4 @@ class RAGIntentParser:
             f"{example_section}\n\n"
             "Message:\n"
             f"{message}\n\n"
-            "Return only JSON."
         )
-
-    def _extract_json(self, response: str) -> dict[str, Any]:
-        response = response.strip()
-        if response.startswith("```"):
-            # Handle fenced code blocks
-            lines = [line for line in response.splitlines() if not line.startswith("```")]
-            response = "\n".join(lines)
-        import json
-
-        return json.loads(response)
-

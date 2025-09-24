@@ -104,12 +104,46 @@ class RAGIndexingService:
                     logger.warning("Failed to deserialize cached segmentation plan: {}", exc)
 
         prompt = self._build_segmentation_prompt(transcript)
-        response = await self.ai_model.generate_text(prompt)
-        if not response:
-            logger.warning("Segmentation LLM returned empty response")
-            return []
-
-        plan = self._parse_segmentation_response(response)
+        response = await self.ai_model.generate_json(
+            prompt,
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "episodes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "order": {"type": "integer"},
+                                "title": {"type": "string"},
+                                "summary": {"type": "string"},
+                                "topics": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "projects": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "alias": {"type": "string"},
+                                            "confidence": {"type": "number"},
+                                            "quote": {"type": "string"},
+                                        },
+                                    },
+                                },
+                                "start_anchor": {"type": "string"},
+                                "end_anchor": {"type": "string"},
+                                "confidence": {"type": "number"},
+                                "notes": {"type": "string"},
+                            },
+                        },
+                    }
+                },
+                "required": ["episodes"],
+            },
+        )
+        plan = self._parse_segmentation_response(response or {})
         if plan:
             self.storage.save_segmentation_plan(
                 meeting_id=meeting_id,
@@ -139,20 +173,15 @@ class RAGIndexingService:
               * end_anchor: quote the last sentence or distinctive phrase of the episode
               * confidence: overall confidence that the segmentation is correct (0-1)
               * notes: optional clarifications or open questions
-            - Respond strictly as JSON with schema {"episodes": [ ... ]}.
 
             Transcript:
             {trimmed}
             """
         ).strip()
 
-    def _parse_segmentation_response(self, response: str) -> List[EpisodePlanSegment]:
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            cleaned = "\n".join(line for line in cleaned.splitlines() if not line.startswith("```"))
+    def _parse_segmentation_response(self, response: Dict[str, Any]) -> List[EpisodePlanSegment]:
         try:
-            data = json.loads(cleaned)
-            episodes = data.get("episodes", [])
+            episodes = response.get("episodes", [])
             plan = []
             for episode in episodes:
                 try:
@@ -172,8 +201,8 @@ class RAGIndexingService:
                 except Exception as exc:
                     logger.warning("Skipping malformed episode entry: {}", exc)
             return plan
-        except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse segmentation response as JSON: {}", exc)
+        except Exception as exc:
+            logger.warning("Failed to parse segmentation response: {}", exc)
             return []
 
     def _find_anchor_positions(self, transcript: str, start_anchor: str, end_anchor: str) -> tuple[int, int]:
@@ -330,17 +359,14 @@ class RAGIndexingService:
             f"{text}\n\n"
             "JSON:\n"
         )
-        response = await self.ai_model.generate_text(prompt)
-        if not response:
-            return {}
-        try:
-            if response.startswith("```"):
-                lines = [line for line in response.splitlines() if not line.startswith("```")]
-                response = "\n".join(lines)
-            return json.loads(response)
-        except Exception as exc:
-            logger.warning("Failed to parse project affinity JSON: {}", exc)
-            return {}
+        response = await self.ai_model.generate_json(
+            prompt,
+            response_schema={
+                "type": "object",
+                "additionalProperties": {"type": "number"},
+            },
+        )
+        return response or {}
 
     async def ingest_meeting(
         self,
@@ -369,7 +395,18 @@ class RAGIndexingService:
                     {episode.text}
                     """
                 )
-                episode.summary = await self.ai_model.generate_text(summary_prompt) or ""
+                summary_json = await self.ai_model.generate_json(
+                    summary_prompt,
+                    response_schema={
+                        "type": "object",
+                        "properties": {"summary": {"type": "string"}},
+                        "required": ["summary"],
+                    },
+                )
+                episode.summary = summary_json.get("summary") if summary_json else None
+                if not episode.summary:
+                    text_fallback = await self.ai_model.generate_text(summary_prompt)
+                    episode.summary = (text_fallback or "").strip()
 
             if not episode.project_affinity:
                 episode.project_affinity = await self.label_episode_projects(episode.text)

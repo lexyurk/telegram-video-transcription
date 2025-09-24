@@ -1,13 +1,11 @@
 """Storage layer for RAG indexing preferences and metadata."""
 
-from __future__ import annotations
-
 import json
 import sqlite3
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 from loguru import logger
 
@@ -18,7 +16,7 @@ from telegram_bot.services.rag_intent_parser import ParsedIntent
 class RAGStorageService:
     """Persist RAG-related state (indexing preferences, projects, meetings)."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         settings = get_settings()
         self.db_path = Path(db_path or settings.rag_db_path)
         self.default_enabled = bool(settings.rag_enable_default)
@@ -98,7 +96,7 @@ class RAGStorageService:
             )
         logger.info("Set indexing for user {} chat {} to {}", user_id, chat_id, enabled)
 
-    def purge_user(self, user_id: int, chat_id: Optional[int] = None) -> None:
+    def purge_user(self, user_id: int, chat_id: int | None = None) -> None:
         with self._connect() as conn:
             if chat_id is not None:
                 conn.execute(
@@ -123,8 +121,8 @@ class RAGStorageService:
         chat_id: int,
         meeting_date: str,
         title: str,
-        topics: List[str],
-        metadata: Dict[str, str],
+        topics: list[str],
+        metadata: dict[str, str],
     ) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -140,7 +138,7 @@ class RAGStorageService:
         self,
         meeting_id: str,
         transcript_hash: str,
-        plan: List[Dict[str, Any]],
+        plan: list[dict[str, Any]],
     ) -> None:
         now = datetime.utcnow().isoformat()
         with self._connect() as conn:
@@ -153,7 +151,7 @@ class RAGStorageService:
             )
         logger.debug("Cached segmentation plan for meeting {}", meeting_id)
 
-    def get_segmentation_plan(self, meeting_id: str) -> Optional[Dict[str, Any]]:
+    def get_segmentation_plan(self, meeting_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             cur = conn.execute(
                 "SELECT transcript_hash, plan_json FROM rag_segmentation_cache WHERE meeting_id=?",
@@ -167,7 +165,7 @@ class RAGStorageService:
                 "segments": json.loads(row["plan_json"] or "[]"),
             }
 
-    def upsert_projects(self, user_id: int, projects: Dict[str, float]) -> None:
+    def upsert_projects(self, user_id: int, projects: dict[str, float]) -> None:
         if not projects:
             return
         now = datetime.utcnow().isoformat()
@@ -190,7 +188,7 @@ class RAGStorageService:
                 )
         logger.debug("Upserted projects for user {}: {}", user_id, list(projects.keys()))
 
-    def list_projects(self, user_id: int) -> List[Dict[str, str]]:
+    def list_projects(self, user_id: int) -> list[dict[str, str]]:
         with self._connect() as conn:
             cur = conn.execute(
                 "SELECT alias, confidence, occurrences, last_seen_at FROM rag_projects WHERE user_id=? ORDER BY alias",
@@ -202,6 +200,6 @@ class RAGStorageService:
     def set_last_intent(self, user_id: int, intent: ParsedIntent) -> None:
         self._last_intent[user_id] = asdict(intent)
 
-    def get_last_intent(self, user_id: int) -> Optional[dict]:
+    def get_last_intent(self, user_id: int) -> dict | None:
         return self._last_intent.get(user_id)
 

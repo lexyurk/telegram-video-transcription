@@ -1,9 +1,7 @@
 """Service orchestrating retrieval and answer generation for RAG queries."""
 
-from __future__ import annotations
-
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from chromadb import PersistentClient
 from chromadb.utils import embedding_functions
@@ -19,9 +17,9 @@ class RAGQueryService:
 
     def __init__(
         self,
-        embedding_model: Optional[str] = None,
-        client: Optional[PersistentClient] = None,
-        ai_model: Optional[AIModel] = None,
+        embedding_model: str | None = None,
+        client: PersistentClient | None = None,
+        ai_model: AIModel | None = None,
     ) -> None:
         settings = get_settings()
         self.base_path = settings.temp_dir
@@ -69,8 +67,8 @@ class RAGQueryService:
             return None
         return response.strip()
 
-    def _build_filter(self, intent: ParsedIntent) -> Dict[str, Any] | None:
-        filters: Dict[str, Any] = {}
+    def _build_filter(self, intent: ParsedIntent) -> dict[str, Any] | None:
+        filters: dict[str, Any] = {}
 
         project_ids = [
             project.get("alias")
@@ -93,8 +91,8 @@ class RAGQueryService:
         self,
         message: str,
         intent: ParsedIntent,
-        documents: List[str],
-        metadatas: List[Dict[str, Any]],
+        documents: list[str],
+        metadatas: list[dict[str, Any]],
     ) -> str:
         language_hint = self._infer_language(message)
         context_snippets = []

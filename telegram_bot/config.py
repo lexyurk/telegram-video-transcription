@@ -1,8 +1,7 @@
 """Configuration settings for the Telegram bot."""
 
-from __future__ import annotations
-
 import os
+from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -82,7 +81,7 @@ def get_settings() -> Settings:
     return Settings(_env_file=env_file, _env_file_encoding="utf-8")
 
 
-def get_settings_dict() -> dict:
+def get_settings_dict() -> dict[str, Any]:
     """Return settings as a plain dictionary."""
     settings = get_settings()
     return settings.model_dump()

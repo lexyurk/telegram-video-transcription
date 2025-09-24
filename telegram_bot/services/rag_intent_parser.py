@@ -1,9 +1,7 @@
 """Intent parsing service for free-form RAG queries."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -15,12 +13,12 @@ class ParsedIntent:
     """Structured representation of a user RAG query."""
 
     intent: str
-    projects: List[dict]
-    date_ranges: List[dict]
-    topics: List[str]
+    projects: list[dict]
+    date_ranges: list[dict]
+    topics: list[str]
     follow_up: bool
     confidence: float
-    uncertainty_reason: Optional[str]
+    uncertainty_reason: str | None
 
 
 class RAGIntentParser:
@@ -33,7 +31,7 @@ class RAGIntentParser:
             self.ai_model = create_ai_model()
         logger.info("RAG intent parser initialized")
 
-    async def parse(self, message: str, context: Optional[dict[str, Any]] = None) -> ParsedIntent:
+    async def parse(self, message: str, context: dict[str, Any] | None = None) -> ParsedIntent:
         """Parse a free-form message into a structured intent."""
 
         context = context or {}

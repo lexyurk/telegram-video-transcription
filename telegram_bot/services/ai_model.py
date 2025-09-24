@@ -1,11 +1,9 @@
 """Abstract AI model interface for different ML providers."""
 
-from __future__ import annotations
-
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from anthropic import AsyncAnthropic
 import google.generativeai as genai
@@ -41,8 +39,8 @@ class AIModel(ABC):
     async def generate_json(
         self,
         prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        response_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Fallback JSON generation by parsing plain text output."""
 
         text = await self.generate_text(prompt)
@@ -93,10 +91,10 @@ class GeminiModel(AIModel):
     async def generate_json(
         self,
         prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        response_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         try:
-            generation_config: Dict[str, Any] = {}
+            generation_config: dict[str, Any] = {}
             if response_schema:
                 generation_config["response_mime_type"] = "application/json"
                 generation_config["response_schema"] = response_schema
@@ -106,7 +104,7 @@ class GeminiModel(AIModel):
             )
             payload = response.text
             if not payload:
-                return {}
+            return {}
             return json.loads(payload)
         except Exception as e:
             logger.error(f"Error generating structured JSON with Gemini: {e}")
@@ -150,10 +148,10 @@ class ClaudeModel(AIModel):
     async def generate_json(
         self,
         prompt: str,
-        response_schema: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        response_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         try:
-            kwargs: Dict[str, Any] = {}
+            kwargs: dict[str, Any] = {}
             if response_schema:
                 kwargs["response_format"] = {"type": "json_object", "schema": response_schema}
             else:
@@ -166,7 +164,7 @@ class ClaudeModel(AIModel):
                 **kwargs,
             )
             if not message.content:
-                return {}
+            return {}
             payload = message.content[0].text
             if not payload:
                 return {}
@@ -176,7 +174,7 @@ class ClaudeModel(AIModel):
             return await super().generate_json(prompt, response_schema)
 
 
-def create_ai_model(settings: Optional[Settings] = None) -> AIModel:
+def create_ai_model(settings: Settings | None = None) -> AIModel:
     """
     Create an AI model instance based on available API keys.
 

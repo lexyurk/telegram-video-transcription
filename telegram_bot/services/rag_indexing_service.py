@@ -1,13 +1,11 @@
 """Service handling meeting ingestion and vector indexing for RAG."""
 
-from __future__ import annotations
-
 import hashlib
 import json
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from chromadb import PersistentClient
 from chromadb.utils import embedding_functions
@@ -29,9 +27,9 @@ class EpisodeChunk:
     episode_id: str
     start_time: float | None
     end_time: float | None
-    project_affinity: Dict[str, float]
-    topics: List[str]
-    metadata: Dict[str, Any]
+    project_affinity: dict[str, float]
+    topics: list[str]
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -41,8 +39,8 @@ class EpisodePlanSegment:
     order: int
     title: str
     summary: str
-    topics: List[str]
-    projects: List[Dict[str, Any]]
+    topics: list[str]
+    projects: list[dict[str, Any]]
     start_anchor: str
     end_anchor: str
     confidence: float
@@ -61,8 +59,8 @@ class Episode:
     end_char: int
     text: str
     summary: str
-    topics: List[str]
-    project_affinity: Dict[str, float]
+    topics: list[str]
+    project_affinity: dict[str, float]
 
 
 class RAGIndexingService:
@@ -70,10 +68,10 @@ class RAGIndexingService:
 
     def __init__(
         self,
-        embedding_model: Optional[str] = None,
-        client: Optional[PersistentClient] = None,
-        ai_model: Optional[AIModel] = None,
-        storage: Optional[RAGStorageService] = None,
+        embedding_model: str | None = None,
+        client: PersistentClient | None = None,
+        ai_model: AIModel | None = None,
+        storage: RAGStorageService | None = None,
     ) -> None:
         settings = get_settings()
         self.base_path = settings.temp_dir
@@ -91,7 +89,7 @@ class RAGIndexingService:
         meeting_id: str,
         transcript: str,
         forced: bool = False,
-    ) -> List[EpisodePlanSegment]:
+    ) -> list[EpisodePlanSegment]:
         """Generate or reuse an LLM-produced episode plan for the transcript."""
 
         transcript_hash = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
@@ -146,7 +144,7 @@ class RAGIndexingService:
              """
         ).strip()
 
-    def _parse_segmentation_response(self, response: str) -> List[EpisodePlanSegment]:
+    def _parse_segmentation_response(self, response: str) -> list[EpisodePlanSegment]:
         cleaned = response.strip()
         if cleaned.startswith("```"):
             cleaned = "\n".join(line for line in cleaned.splitlines() if not line.startswith("```"))
@@ -197,9 +195,9 @@ class RAGIndexingService:
     def _split_transcript_by_plan(
         self,
         transcript: str,
-        plan: List[EpisodePlanSegment],
-    ) -> List[Episode]:
-        episodes: List[Episode] = []
+        plan: list[EpisodePlanSegment],
+    ) -> list[Episode]:
+        episodes: list[Episode] = []
         last_end = 0
         sentences = re.split(r"(?<=[.!?])\s+", transcript)
 
@@ -287,7 +285,7 @@ class RAGIndexingService:
         except Exception as exc:
             logger.warning("Failed to delete namespace {}: {}", collection_name, exc)
 
-    def index_chunks(self, user_id: int, chunks: List[EpisodeChunk]) -> None:
+    def index_chunks(self, user_id: int, chunks: list[EpisodeChunk]) -> None:
         """Index prepared chunks for the user."""
         if not chunks:
             logger.info("No chunks to index for user {}", user_id)
@@ -345,7 +343,7 @@ class RAGIndexingService:
         cleaned = re.sub(r"[^a-z0-9]+", "_", alias.lower())
         return cleaned.strip("_")
 
-    async def label_episode_projects(self, text: str) -> Dict[str, float]:
+    async def label_episode_projects(self, text: str) -> dict[str, float]:
         """Use LLM to label project affinity for an episode."""
         prompt = (
             "You are an expert assistant labeling meeting transcript segments with project relevance.\n"
@@ -372,15 +370,15 @@ class RAGIndexingService:
         user_id: int,
         meeting_id: str,
         transcript: str,
-        meeting_metadata: Dict[str, Any],
-    ) -> List[Episode]:
+        meeting_metadata: dict[str, Any],
+    ) -> list[Episode]:
         """Segment, summarize, and index a meeting transcript."""
 
         logger.info("Ingesting meeting {} for user {}", meeting_id, user_id)
         plan = await self.generate_segmentation_plan(meeting_id, transcript)
         episodes = self._split_transcript_by_plan(transcript, plan)
 
-        indexed_chunks: List[EpisodeChunk] = []
+        indexed_chunks: list[EpisodeChunk] = []
         for idx, episode in enumerate(episodes):
             episode_id = f"{meeting_id}:episode:{idx}"
             episode.episode_id = episode_id

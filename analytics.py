@@ -3,11 +3,10 @@
 Provides a tiny wrapper that is safe to import in any part of the app.
 If POSTHOG_API_KEY is missing, all calls are no-ops.
 """
-from __future__ import annotations
 
 import atexit
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 from posthog import Posthog as _PosthogClient
 
 
@@ -22,12 +21,12 @@ def zoom_distinct_id(zoom_user_id: str) -> str:
 
 
 class Analytics:
-    def __init__(self, api_key: Optional[str], host: Optional[str]) -> None:
+    def __init__(self, api_key: str | None, host: str | None) -> None:
         # Enable when API key is present. Use official PostHog client with explicit kwargs.
         self.api_key = (api_key or "").strip()
         self.host = (host or os.getenv("POSTHOG_HOST") or "https://app.posthog.com").strip()
         self.enabled = bool(self.api_key)
-        self._client: Optional[_PosthogClient] = None
+        self._client: _PosthogClient | None = None
 
         if not self.enabled:
             return
@@ -36,7 +35,7 @@ class Analytics:
         self._client = _PosthogClient(project_api_key=self.api_key, host=self.host)
         atexit.register(self.flush)
 
-    def identify(self, distinct_id: str, properties: Optional[Dict[str, Any]] = None) -> None:
+    def identify(self, distinct_id: str, properties: dict[str, Any] | None = None) -> None:
         if not self.enabled or not self._client:
             return
         try:
@@ -49,8 +48,8 @@ class Analytics:
         self,
         distinct_id: str,
         event: str,
-        properties: Optional[Dict[str, Any]] = None,
-        groups: Optional[Dict[str, Any]] = None,
+        properties: dict[str, Any] | None = None,
+        groups: dict[str, Any] | None = None,
     ) -> None:
         if not self.enabled or not self._client:
             return
@@ -85,7 +84,7 @@ class Analytics:
         self,
         group_type: str,
         group_key: str,
-        properties: Optional[Dict[str, Any]] = None,
+        properties: dict[str, Any] | None = None,
     ) -> None:
         if not self.enabled or not self._client:
             return

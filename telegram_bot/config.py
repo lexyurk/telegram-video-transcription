@@ -1,5 +1,9 @@
 """Configuration settings for the Telegram bot."""
 
+from __future__ import annotations
+
+import os
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,7 +12,7 @@ class Settings(BaseSettings):
     """Application settings from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=None, env_file_encoding="utf-8", extra="ignore"
     )
 
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
@@ -61,7 +65,24 @@ class Settings(BaseSettings):
     posthog_api_key: str = Field(default="", alias="POSTHOG_API_KEY")
     posthog_host: str = Field(default="https://app.posthog.com", alias="POSTHOG_HOST")
 
+    # RAG storage + vector settings
+    rag_db_path: str = Field(default="./temp/rag_indexing.sqlite3", alias="RAG_DB_PATH")
+    rag_enable_default: bool = Field(default=False, alias="RAG_ENABLE_DEFAULT")
+    rag_embedding_model: str = Field(
+        default="sentence-transformers/roberta-base-nli-mean-tokens",
+        alias="RAG_EMBEDDING_MODEL",
+    )
+
 
 def get_settings() -> Settings:
     """Get settings instance."""
-    return Settings()
+    env_file = None
+    if not os.getenv("PYTEST_CURRENT_TEST") and os.path.exists(".env"):
+        env_file = ".env"
+    return Settings(_env_file=env_file, _env_file_encoding="utf-8")
+
+
+def get_settings_dict() -> dict:
+    """Return settings as a plain dictionary."""
+    settings = get_settings()
+    return settings.model_dump()

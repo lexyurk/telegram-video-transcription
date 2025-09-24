@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from telegram_bot.config import Settings
+from telegram_bot.services.ai_model import create_ai_model, GeminiModel, ClaudeModel
 
 
 def test_settings_default_values():
@@ -88,8 +89,6 @@ def test_ai_model_creation_gemini_priority():
             "ANTHROPIC_API_KEY": "test_anthropic",
         },
     ):
-        from telegram_bot.services.ai_model import create_ai_model, GeminiModel
-        
         ai_model = create_ai_model()
         assert isinstance(ai_model, GeminiModel)
 
@@ -106,8 +105,6 @@ def test_ai_model_creation_claude_fallback():
             "ANTHROPIC_API_KEY": "test_anthropic",
         },
     ):
-        from telegram_bot.services.ai_model import create_ai_model, ClaudeModel
-        
         ai_model = create_ai_model()
         assert isinstance(ai_model, ClaudeModel)
 
@@ -123,7 +120,5 @@ def test_ai_model_creation_no_keys():
             "DEEPGRAM_API_KEY": "test_deepgram",
         },
     ):
-        from telegram_bot.services.ai_model import create_ai_model
-        
         with pytest.raises(ValueError, match="No AI model API key provided"):
             create_ai_model()

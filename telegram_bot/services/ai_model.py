@@ -7,7 +7,7 @@ from anthropic import AsyncAnthropic
 from google import genai
 from loguru import logger
 
-from telegram_bot.config import get_settings
+from telegram_bot.config import get_settings, Settings
 
 
 class AIModel(ABC):
@@ -65,7 +65,7 @@ class ClaudeModel(AIModel):
             return None
 
 
-def create_ai_model() -> AIModel:
+def create_ai_model(settings: Optional[Settings] = None) -> AIModel:
     """
     Create an AI model instance based on available API keys.
     
@@ -77,25 +77,30 @@ def create_ai_model() -> AIModel:
     Raises:
         ValueError: If no valid API keys are provided
     """
-    settings = get_settings()
-    
+    settings = settings or get_settings()
+
+    google_key = settings.google_api_key
+    anthropic_key = settings.anthropic_api_key
+
+    gemini_model_name = settings.gemini_model
+    claude_model_name = settings.claude_model
+
     # Check for Gemini API key first (priority)
-    if settings.google_api_key:
+    if google_key:
         logger.info("Using Gemini model (Google API key provided)")
         return GeminiModel(
-            api_key=settings.google_api_key,
-            model_name=settings.gemini_model
+            api_key=google_key,
+            model_name=gemini_model_name,
         )
-    
+
     # Fallback to Claude
-    elif settings.anthropic_api_key:
+    if anthropic_key:
         logger.info("Using Claude model (Anthropic API key provided)")
         return ClaudeModel(
-            api_key=settings.anthropic_api_key,
-            model_name=settings.claude_model
+            api_key=anthropic_key,
+            model_name=claude_model_name,
         )
-    
-    else:
-        raise ValueError(
-            "No AI model API key provided. Please set either GOOGLE_API_KEY or ANTHROPIC_API_KEY"
-        ) 
+
+    raise ValueError(
+        "No AI model API key provided. Please set either GOOGLE_API_KEY or ANTHROPIC_API_KEY"
+    ) 

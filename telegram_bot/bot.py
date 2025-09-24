@@ -24,6 +24,10 @@ from telegram_bot.services import (
     DiagramService,
     QuestionAnsweringService,
     MediaInfoService,
+    RAGIndexingService,
+    RAGQueryService,
+    RAGIntentParser,
+    RAGStorageService,
 )
 from telegram_bot.services.zoom_download_service import ZoomDownloadService
 from telegram_bot.mtproto_downloader import MTProtoDownloader
@@ -45,6 +49,21 @@ class TelegramTranscriptionBot:
         self.mtproto_downloader = MTProtoDownloader()
         self.zoom_download_service = ZoomDownloadService()
 
+        # RAG subsystems
+        self.rag_enabled = True
+        try:
+            self.rag_storage_service = RAGStorageService()
+            self.rag_indexing_service = RAGIndexingService()
+            self.rag_query_service = RAGQueryService()
+            self.rag_intent_parser = RAGIntentParser()
+        except Exception as exc:
+            logger.warning("RAG features disabled: {}", exc)
+            self.rag_enabled = False
+            self.rag_storage_service = None
+            self.rag_indexing_service = None
+            self.rag_query_service = None
+            self.rag_intent_parser = None
+
     async def initialize(self) -> None:
         """Initialize the bot services."""
         await self.mtproto_downloader.initialize()
@@ -60,6 +79,10 @@ class TelegramTranscriptionBot:
     ) -> None:
         """Handle the /start command."""
         settings = get_settings()
+
+        indexing_status = "enabled" if self.rag_storage_service.is_indexing_enabled(
+            update.effective_user.id, update.effective_chat.id
+        ) else "disabled"
         
         # Determine which AI model is being used
         ai_provider = "Gemini 2.5 Flash" if settings.google_api_key else "Claude AI"
@@ -767,6 +790,48 @@ Just send me a file and I'll handle the rest! 🚀
             except Exception:
                 pass
 
+    async def handle_rag_query(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        message_text: str,
+    ) -> bool:
+        """Process free-form text queries via RAG when indexing is enabled."""
+        if not self.rag_enabled or not self.rag_storage_service:
+            return False
+
+        user = update.effective_user
+        chat = update.effective_chat
+        if not user or not chat:
+            return False
+
+        user_id = user.id
+        chat_id = chat.id
+
+        if not self.rag_storage_service.is_indexing_enabled(user_id, chat_id):
+            return False
+
+        try:
+            last_intent = self.rag_storage_service.get_last_intent(user_id) if self.rag_storage_service else None
+            parser_context = {"previous_intent": last_intent} if last_intent else {}
+            parsed_intent = await self.rag_intent_parser.parse(message_text, parser_context)
+            if parsed_intent.confidence < 0.3:
+                logger.info("Low confidence intent for user {}", user_id)
+                return False
+
+            if self.rag_storage_service:
+                self.rag_storage_service.set_last_intent(user_id, parsed_intent)
+
+            answer = await self.rag_query_service.answer(user_id, parsed_intent, message_text)
+            if not answer:
+                return False
+
+            await update.message.reply_text(answer)
+            return True
+        except Exception as exc:
+            logger.warning("RAG query failed for user {}: {}", user_id, exc)
+            return False
+
     async def handle_file(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -1073,6 +1138,40 @@ Just send me a file and I'll handle the rest! 🚀
                 transcript
             )
 
+            if (
+                self.rag_enabled
+                and self.rag_storage_service
+                and self.rag_indexing_service
+                and self.rag_storage_service.is_indexing_enabled(user_id, update.effective_chat.id)
+            ):
+                try:
+                    meeting_id = f"transcript:{user_id}:{timestamp}"
+                    meeting_metadata = {
+                        "meeting_date": datetime.now().isoformat(),
+                        "source": escaped_file_name,
+                        "chat_id": update.effective_chat.id,
+                    }
+                    episodes = await self.rag_indexing_service.ingest_meeting(
+                        user_id=user_id,
+                        meeting_id=meeting_id,
+                        transcript=transcript,
+                        meeting_metadata=meeting_metadata,
+                    )
+                    if episodes:
+                        primary_projects = episodes[0].project_affinity
+                        self.rag_storage_service.record_meeting(
+                            meeting_id=meeting_id,
+                            user_id=user_id,
+                            chat_id=update.effective_chat.id,
+                            meeting_date=meeting_metadata["meeting_date"],
+                            title=escaped_file_name,
+                            topics=episodes[0].topics,
+                            metadata=meeting_metadata,
+                        )
+                        self.rag_storage_service.upsert_projects(user_id, primary_projects)
+                except Exception as exc:
+                    logger.warning("RAG ingestion failed for user {}: {}", user_id, exc)
+
             if summary:
                 # Send summary as formatted message (Telegram classic Markdown uses single * for bold)
                 summary_message = f"📋 *Summary & Action Points*\n\n{summary}"
@@ -1182,17 +1281,25 @@ Just send me a file and I'll handle the rest! 🚀
     ) -> None:
         """Handle text messages - check for transcript questions or Zoom links."""
         # Check if this is a reply to a transcript file
-        if (update.message.reply_to_message and
-            update.message.reply_to_message.document and
-            update.message.reply_to_message.document.file_name and
-            update.message.reply_to_message.document.file_name.startswith("transcript_") and
-            update.message.reply_to_message.document.file_name.endswith(".txt")):
+        if (
+            update.message.reply_to_message
+            and update.message.reply_to_message.document
+            and update.message.reply_to_message.document.file_name
+            and update.message.reply_to_message.document.file_name.startswith("transcript_")
+            and update.message.reply_to_message.document.file_name.endswith(".txt")
+        ):
             # This is a question about a transcript
             await self.handle_transcript_question(update, context)
             return
 
+        message_text = update.message.text or ""
+
+        if self.rag_enabled and self.rag_storage_service:
+            response = await self.handle_rag_query(update, context, message_text)
+            if response:
+                return
+
         # Check if message contains a Zoom recording link with access code
-        message_text = update.message.text
         zoom_info = self.zoom_download_service.parse_zoom_message(message_text)
 
         if zoom_info:

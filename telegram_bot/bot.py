@@ -1135,9 +1135,13 @@ Just send me a file and I'll handle the rest! 🚀
                 pass
 
             # Create summary
-            summary = await self.summarization_service.create_summary_with_action_points(
+            summary, summary_usage = await self.summarization_service.create_summary_with_action_points(
                 transcript
             )
+
+            summary_tokens = summary_usage.total_tokens if summary_usage else None
+            prompt_tokens = summary_usage.prompt_tokens if summary_usage else None
+            completion_tokens = summary_usage.completion_tokens if summary_usage else None
 
             if (
                 self.rag_enabled

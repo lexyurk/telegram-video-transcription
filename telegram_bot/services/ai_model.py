@@ -1,7 +1,10 @@
 """Abstract AI model interface for different ML providers."""
 
+from __future__ import annotations
+
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from anthropic import AsyncAnthropic
@@ -11,13 +14,29 @@ from loguru import logger
 from telegram_bot.config import get_settings, Settings
 
 
+@dataclass
+class GenerationResult:
+    """Container for text generation responses and billing metadata."""
+
+    text: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    provider: str
+    model: str
+
+
 class AIModel(ABC):
     """Abstract base class for AI models."""
 
     @abstractmethod
+    async def generate_text_with_metadata(self, prompt: str) -> GenerationResult | None:
+        """Generate text plus token usage metadata."""
+        raise NotImplementedError
+
     async def generate_text(self, prompt: str) -> str | None:
-        """Generate text response from the AI model."""
-        pass
+        result = await self.generate_text_with_metadata(prompt)
+        return result.text if result else None
 
     async def generate_json(
         self,
@@ -49,11 +68,24 @@ class GeminiModel(AIModel):
         self.model = genai.GenerativeModel(model_name=self.model_name)
         logger.info(f"Initialized Gemini model: {model_name}")
 
-    async def generate_text(self, prompt: str) -> str | None:
-        """Generate text using Gemini."""
+    async def generate_text_with_metadata(self, prompt: str) -> GenerationResult | None:
         try:
             response = self.model.generate_content(prompt)
-            return response.text
+            text = response.text or ""
+            usage = getattr(response, "usage_metadata", None)
+            prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            completion_tokens = getattr(usage, "candidates_token_count", 0) or 0
+            total_tokens = getattr(usage, "total_token_count", prompt_tokens + completion_tokens) or (
+                prompt_tokens + completion_tokens
+            )
+            return GenerationResult(
+                text=text,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                provider="gemini",
+                model=self.model_name,
+            )
         except Exception as e:
             logger.error(f"Error generating text with Gemini: {e}")
             return None
@@ -90,8 +122,7 @@ class ClaudeModel(AIModel):
         self.model_name = model_name
         logger.info(f"Initialized Claude model: {model_name}")
 
-    async def generate_text(self, prompt: str) -> str | None:
-        """Generate text using Claude."""
+    async def generate_text_with_metadata(self, prompt: str) -> GenerationResult | None:
         try:
             message = await self.client.messages.create(
                 model=self.model_name,
@@ -99,7 +130,19 @@ class ClaudeModel(AIModel):
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return message.content[0].text
+            text = message.content[0].text if message.content else ""
+            usage = getattr(message, "usage", None)
+            prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+            completion_tokens = getattr(usage, "output_tokens", 0) or 0
+            total_tokens = prompt_tokens + completion_tokens
+            return GenerationResult(
+                text=text,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                provider="claude",
+                model=self.model_name,
+            )
         except Exception as e:
             logger.error(f"Error generating text with Claude: {e}")
             return None
@@ -136,12 +179,12 @@ class ClaudeModel(AIModel):
 def create_ai_model(settings: Optional[Settings] = None) -> AIModel:
     """
     Create an AI model instance based on available API keys.
-    
+
     Priority: Gemini > Claude
-    
+
     Returns:
         AIModel instance
-        
+
     Raises:
         ValueError: If no valid API keys are provided
     """

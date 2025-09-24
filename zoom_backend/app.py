@@ -723,12 +723,21 @@ async def process_recording(
             await send_telegram_document(chat_id, transcript_file_path, f"📄 Transcript from Zoom: {data.get('topic','')}")
 
             # Create and send summary
-            summary = await summarization_service.create_summary_with_action_points(transcript)
+            summary, summary_usage = await summarization_service.create_summary_with_action_points(transcript)
             if summary:
                 await send_long_message(chat_id, f"📋 *Summary & Action Points*\n\n{summary}")
                 try:
                     distinct_id = tg_distinct_id(telegram_user_id) if telegram_user_id else zoom_distinct_id(zoom_user_id)
-                    analytics.capture(distinct_id, "zoom_summary_succeeded", {"chars": len(summary or "")})
+                    analytics.capture(
+                        distinct_id,
+                        "zoom_summary_succeeded",
+                        {
+                            "chars": len(summary or ""),
+                            "summary_tokens_total": summary_usage.total_tokens if summary_usage else None,
+                            "summary_tokens_prompt": summary_usage.prompt_tokens if summary_usage else None,
+                            "summary_tokens_completion": summary_usage.completion_tokens if summary_usage else None,
+                        },
+                    )
                 except Exception:
                     pass
         else:

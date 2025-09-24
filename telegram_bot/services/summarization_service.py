@@ -4,6 +4,7 @@ import re
 from loguru import logger
 
 from telegram_bot.services.ai_model import AIModel, create_ai_model
+from telegram_bot.services.ai_model import GenerationResult
 
 
 class SummarizationService:
@@ -78,7 +79,7 @@ class SummarizationService:
         
         return text.strip()
 
-    async def create_summary_with_action_points(self, transcript: str) -> str | None:
+    async def create_summary_with_action_points(self, transcript: str) -> tuple[str | None, GenerationResult | None]:
         """
         Create a summary with action points using AI.
 
@@ -91,7 +92,7 @@ class SummarizationService:
         try:
             if not transcript.strip():
                 logger.warning("Empty transcript provided for summarization")
-                return None
+                return None, None
 
             # Remove speaker labels to avoid language confusion in AI
             clean_transcript = self._remove_speaker_labels(transcript)
@@ -139,17 +140,20 @@ Transcript (cleaned):
 Original transcript (with labels) for reference:
 {transcript}"""
 
-            summary = await self.ai_model.generate_text(prompt)
-            
-            if summary:
-                # Sanitize the markdown before returning
-                sanitized_summary = self._sanitize_markdown(summary)
-                logger.info(f"Successfully created summary: {len(sanitized_summary)} characters")
-                return sanitized_summary
+            summary_result = await self.ai_model.generate_text_with_metadata(prompt)
+
+            if summary_result:
+                sanitized_summary = self._sanitize_markdown(summary_result.text)
+                logger.info(
+                    "Successfully created summary: {} characters ({} total tokens)".format(
+                        len(sanitized_summary), summary_result.total_tokens
+                    )
+                )
+                return sanitized_summary, summary_result
             else:
                 logger.error("AI model returned empty summary")
-                return None
+                return None, None
 
         except Exception as e:
             logger.error(f"Error creating summary: {e}", exc_info=True)
-            return None 
+            return None, None 

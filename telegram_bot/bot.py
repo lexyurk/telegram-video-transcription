@@ -30,7 +30,6 @@ from telegram_bot.services import (
     RAGIntentParser,
     RAGStorageService,
 )
-from telegram_bot.services.zoom_download_service import ZoomDownloadService
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 from analytics import analytics, tg_distinct_id
 
@@ -48,7 +47,6 @@ class TelegramTranscriptionBot:
         self.question_answering_service = QuestionAnsweringService()
         self.media_info_service = MediaInfoService()
         self.mtproto_downloader = MTProtoDownloader()
-        self.zoom_download_service = ZoomDownloadService()
 
         # RAG subsystems
         self.rag_enabled = True
@@ -595,201 +593,29 @@ Just send me a file and I'll handle the rest! 🚀
             pass
 
         logger.info(f"User {user_id} sent Zoom link: {recording_url[:50]}...")
-
-        # Send initial message
-        processing_msg = await update.message.reply_text(
-            "🔗 **Zoom Recording Detected!**\n\n"
-            "📥 Downloading recording from Zoom...\n"
-            "🔑 Using provided access code\n\n"
-            "⏳ This may take a few minutes depending on the file size.",
-            parse_mode="Markdown",
-        )
-
-        temp_files_to_cleanup = []
-
+ 
+         # Send initial message
+         processing_msg = await update.message.reply_text(
+             "🔗 **Zoom Recording Detected!**\n\n"
+            "⚠️ Автоматическое скачивание Zoom записей пока отключено."
+            "\nПожалуйста, скачайте запись вручную и отправьте её сюда как файл"
+            " (видео или аудио). Я обработаю её тем же пайплайном.",
+             parse_mode="Markdown",
+         )
+ 
+         try:
+             analytics.capture(distinct_id, "zoom_download_unavailable")
+         except Exception:
+             pass
+ 
         try:
-            # Download progress callback
-            async def progress_callback(progress: float):
-                try:
-                    # Update every 10% to avoid too many API calls
-                    if int(progress) % 10 == 0:
-                        await processing_msg.edit_text(
-                            f"🔗 **Zoom Recording Download**\n\n"
-                            f"📥 Downloading: {progress:.0f}%\n"
-                            f"{'█' * int(progress / 10)}{'░' * (10 - int(progress / 10))}",
-                            parse_mode="Markdown",
-                        )
-                except Exception:
-                    pass  # Ignore update errors
-
-            # Download the Zoom recording
-            downloaded_file = await self.zoom_download_service.download_zoom_recording(
-                recording_url, access_code, progress_callback
-            )
-
-            if not downloaded_file:
-                await processing_msg.edit_text(
-                    "❌ **Failed to download Zoom recording**\n\n"
-                    "Could not download the recording. This might be due to:\n"
-                    "• Invalid or expired link\n"
-                    "• Incorrect access code\n"
-                    "• Recording no longer available\n\n"
-                    "Please check the link and access code and try again.",
-                    parse_mode="Markdown",
-                )
-                try:
-                    analytics.capture(distinct_id, "zoom_download_failed")
-                except Exception:
-                    pass
-                return
-
-            temp_files_to_cleanup.append(downloaded_file)
-
-            # Check if it's a video file and extract audio
-            file_extension = os.path.splitext(downloaded_file)[1].lower()
-            if file_extension in ['.mp4', '.mkv', '.avi', '.mov', '.webm']:
-                await processing_msg.edit_text(
-                    "🔗 **Zoom Recording Downloaded!**\n\n"
-                    "🎵 Extracting audio from video...",
-                    parse_mode="Markdown",
-                )
-
-                audio_file = await self.zoom_download_service.extract_audio_from_video(downloaded_file)
-                if audio_file:
-                    temp_files_to_cleanup.append(audio_file)
-                    # Use the audio file for transcription
-                    file_to_process = audio_file
-                else:
-                    # Fall back to processing the video directly
-                    file_to_process = downloaded_file
-            else:
-                file_to_process = downloaded_file
-
-            # Update message for transcription
             await processing_msg.edit_text(
-                "🔗 **Zoom Recording Downloaded!**\n\n"
-                "🎙️ Starting transcription...\n"
-                "⏳ This may take a few minutes.",
+                "🔗 **Zoom Recording Detected!**\n\n"
+                "📥 Скачайте запись и отправьте файл сюда, чтобы я его обработал.",
                 parse_mode="Markdown",
             )
-
-            # Process the file through the normal transcription pipeline
-            # Get file info
-            file_size = os.path.getsize(file_to_process)
-            file_name = f"zoom_recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp3"
-
-            # Get media duration
-            media_duration = None
-            try:
-                media_info = await self.media_info_service.get_media_info(file_to_process)
-                if media_info and media_info.duration:
-                    media_duration = media_info.duration
-                    logger.info(f"Media duration: {media_duration:.2f} seconds")
-            except Exception as e:
-                logger.warning(f"Could not get media duration: {e}")
-
-            # Transcribe the file
-            transcript = await self.transcription_service.transcribe_file(file_to_process)
-
-            if not transcript:
-                await processing_msg.edit_text(
-                    "❌ **Transcription failed!**\n\n"
-                    "Could not transcribe the audio. The file might be corrupted or in an unsupported format.",
-                    parse_mode="Markdown",
-                )
-                try:
-                    analytics.capture(distinct_id, "zoom_transcription_failed")
-                except Exception:
-                    pass
-                return
-
-            # Process transcript with speaker names if available
-            transcript = await self.speaker_identification_service.process_transcript_with_speaker_names(
-                transcript, update.message
-            )
-
-            # Save transcript to file
-            transcript_file_path = await self.file_service.create_text_file(
-                transcript, f"transcript_zoom_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            )
-            temp_files_to_cleanup.append(transcript_file_path)
-
-            # Generate summary
-            await processing_msg.edit_text(
-                "🔗 **Zoom Recording Transcribed!**\n\n"
-                "📝 Generating summary with action points...",
-                parse_mode="Markdown",
-            )
-
-            summary = await self.summarization_service.generate_summary(transcript)
-
-            # Send the transcript file
-            with open(transcript_file_path, "rb") as f:
-                await update.message.reply_document(
-                    document=f,
-                    caption=(
-                        f"✅ **Zoom Recording Transcription Complete!**\n\n"
-                        f"📁 **Source:** Zoom Recording\n"
-                        f"📏 **Size:** {file_size / 1024 / 1024:.1f} MB\n"
-                        f"{f'⏱️ **Duration:** {self._format_duration(media_duration)}' if media_duration else ''}\n"
-                        f"🔤 **Words:** {len(transcript.split())}\n\n"
-                        f"💡 Reply to this file with any question to get answers using Claude Sonnet 4!"
-                    ),
-                    parse_mode="Markdown",
-                )
-
-            # Send summary if available
-            if summary:
-                await update.message.reply_text(
-                    f"📋 **Summary & Action Points:**\n\n{summary}",
-                    parse_mode="Markdown",
-                )
-
-            # Delete the processing message
-            await processing_msg.delete()
-
-            logger.info(f"Successfully processed Zoom recording for user {user_id}")
-            try:
-                analytics.capture(
-                    distinct_id,
-                    "zoom_recording_processed",
-                    {
-                        "file_size_mb": file_size / 1024 / 1024,
-                        "duration_seconds": media_duration,
-                        "transcript_words": len(transcript.split()),
-                    }
-                )
-            except Exception:
-                pass
-
-        except Exception as e:
-            logger.error(f"Error processing Zoom link for user {user_id}: {e}", exc_info=True)
-            await processing_msg.edit_text(
-                f"❌ **Error processing Zoom recording**\n\n"
-                f"Error: {str(e)}\n\n"
-                f"Please try again or send the file directly.",
-                parse_mode="Markdown",
-            )
-            try:
-                analytics.capture(distinct_id, "zoom_processing_error", {"error": str(e)[:200]})
-            except Exception:
-                pass
-
-        finally:
-            # Cleanup all temporary files
-            for temp_file in temp_files_to_cleanup:
-                try:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
-                        logger.debug(f"Cleaned up temp file: {temp_file}")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
-
-            # Close the Zoom download service client
-            try:
-                await self.zoom_download_service.client.aclose()
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     async def handle_rag_query(
         self,
@@ -1310,7 +1136,7 @@ Just send me a file and I'll handle the rest! 🚀
                 return
 
         # Check if message contains a Zoom recording link with access code
-        zoom_info = self.zoom_download_service.parse_zoom_message(message_text)
+        zoom_info = None
 
         if zoom_info:
             # Found Zoom link with access code

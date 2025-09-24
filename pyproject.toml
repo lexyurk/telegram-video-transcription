@@ -30,6 +30,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "PyJWT>=2.8.0",
     "posthog>=3.5.0",
+    "yt-dlp>=2024.1.0",
 ]
 
 [project.optional-dependencies]

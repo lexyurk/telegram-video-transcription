@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_media_info.py:*)",
+      "mcp__posthog__query-run",
+      "mcp__posthog__insight-create-from-query",
+      "mcp__posthog__query-generate-hogql-from-question",
+      "Bash(uv run:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

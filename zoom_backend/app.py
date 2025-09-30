@@ -716,14 +716,29 @@ async def process_recording(
                         )
                     except Exception as e:
                         logger.warning(f"Failed to apply Zoom speaker names: {e}")
-            # Save and send transcript file
+            # Save and send transcript file with date header
             timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
             transcript_filename = f"transcript_{timestamp}.txt"
-            transcript_file_path = await file_service.create_text_file(transcript, transcript_filename)
+
+            # Add recording date to transcript
+            recording_date_str = None
+            if data.get("start_time"):
+                try:
+                    from datetime import datetime
+                    start_dt = datetime.fromisoformat(data["start_time"].replace("Z", "+00:00"))
+                    recording_date_str = start_dt.strftime("%B %d, %Y at %H:%M")
+                    transcript_with_date = f"Recording Date: {recording_date_str}\n\n{transcript}"
+                except Exception as e:
+                    logger.warning(f"Failed to parse Zoom start_time: {e}")
+                    transcript_with_date = transcript
+            else:
+                transcript_with_date = transcript
+
+            transcript_file_path = await file_service.create_text_file(transcript_with_date, transcript_filename)
             await send_telegram_document(chat_id, transcript_file_path, f"📄 Transcript from Zoom: {data.get('topic','')}")
 
-            # Create and send summary
-            summary = await summarization_service.create_summary_with_action_points(transcript)
+            # Create and send summary with date
+            summary = await summarization_service.create_summary_with_action_points(transcript, recording_date=recording_date_str)
             if summary:
                 await send_long_message(chat_id, f"📋 *Summary & Action Points*\n\n{summary}")
                 try:

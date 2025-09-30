@@ -562,6 +562,9 @@ Just send me a file and I'll handle the rest! 🚀
         chat_id = update.effective_chat.id
         message_id = update.message.message_id
 
+        # Get the message date for transcription metadata
+        message_date = update.message.date
+
         # Get file info from different message types
         file_obj = None
         file_name = None
@@ -810,11 +813,15 @@ Just send me a file and I'll handle the rest! 🚀
                 transcript
             )
 
+            # Add date header to transcript
+            formatted_date = message_date.strftime("%B %d, %Y at %H:%M")
+            transcript_with_date = f"Recording Date: {formatted_date}\n\n{transcript}"
+
             # Create transcript file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             transcript_filename = f"transcript_{timestamp}.txt"
             transcript_file_path = await self.file_service.create_text_file(
-                transcript, transcript_filename
+                transcript_with_date, transcript_filename
             )
             temp_files_to_cleanup.append(transcript_file_path)
 
@@ -849,9 +856,9 @@ Just send me a file and I'll handle the rest! 🚀
             except Exception:
                 pass
 
-            # Create summary
+            # Create summary with date
             summary = await self.summarization_service.create_summary_with_action_points(
-                transcript
+                transcript, recording_date=formatted_date
             )
 
             if summary:

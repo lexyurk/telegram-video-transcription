@@ -78,12 +78,13 @@ class SummarizationService:
         
         return text.strip()
 
-    async def create_summary_with_action_points(self, transcript: str) -> str | None:
+    async def create_summary_with_action_points(self, transcript: str, recording_date: str | None = None) -> str | None:
         """
         Create a summary with action points using AI.
 
         Args:
             transcript: The transcript text to summarize
+            recording_date: Optional recording date string to include in summary
 
         Returns:
             Summary with action points or None if failed
@@ -97,6 +98,9 @@ class SummarizationService:
             clean_transcript = self._remove_speaker_labels(transcript)
             logger.info(f"Removed speaker labels for summarization. Original: {len(transcript)} chars, Clean: {len(clean_transcript)} chars")
 
+            # Build date header for summary if provided
+            date_header = f"**Recording Date: {recording_date}**\n\n" if recording_date else ""
+
             # Improved prompt for cleaner markdown output and explicit AI task capture
             prompt = f"""Analyze this meeting transcript and create a focused summary with actionable insights.
 
@@ -106,7 +110,7 @@ FORMATTING: Use simple markdown - **bold** for headers, - for bullet points. Kee
 
 Structure your response as:
 
-**Executive Summary**
+{date_header}**Executive Summary**
 - 1-3 sentences summarizing outcomes and significance
 
 **Key Points**

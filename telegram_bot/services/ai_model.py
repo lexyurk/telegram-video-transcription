@@ -44,18 +44,18 @@ class GeminiModel(AIModel):
 class ClaudeModel(AIModel):
     """Anthropic Claude AI model implementation."""
 
-    def __init__(self, api_key: str, model_name: str = "claude-sonnet-4-20250514") -> None:
+    def __init__(self, api_key: str, model_name: str = "claude-sonnet-4-5-20250929") -> None:
         """Initialize Claude model."""
         self.client = AsyncAnthropic(api_key=api_key)
         self.model_name = model_name
         logger.info(f"Initialized Claude model: {model_name}")
 
-    async def generate_text(self, prompt: str) -> str | None:
+    async def generate_text(self, prompt: str, max_tokens: int = 8000) -> str | None:
         """Generate text using Claude."""
         try:
             message = await self.client.messages.create(
                 model=self.model_name,
-                max_tokens=4000,
+                max_tokens=max_tokens,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
             )

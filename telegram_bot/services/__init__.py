@@ -7,6 +7,10 @@ from .speaker_identification_service import SpeakerIdentificationService
 from .diagram_service import DiagramService
 from .question_answering_service import QuestionAnsweringService
 from .media_info_service import MediaInfoService
+from .rag_indexing_service import RAGIndexingService
+from .rag_query_service import RAGQueryService
+from .rag_intent_parser import RAGIntentParser, ParsedIntent
+from .rag_storage_service import RAGStorageService
 
 __all__ = [
     "FileService",
@@ -16,4 +20,9 @@ __all__ = [
     "DiagramService",
     "QuestionAnsweringService",
     "MediaInfoService",
+    "RAGIndexingService",
+    "RAGQueryService",
+    "RAGIntentParser",
+    "ParsedIntent",
+    "RAGStorageService",
 ]

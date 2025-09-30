@@ -43,10 +43,22 @@ class Settings(BaseSettings):
     enable_filler_words: bool = Field(default=True, alias="ENABLE_FILLER_WORDS")
 
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
-    claude_model: str = Field(default="claude-sonnet-4-20250514", alias="CLAUDE_MODEL")
+    claude_model: str = Field(default="claude-sonnet-4-5-20250929", alias="CLAUDE_MODEL")
 
     enable_streaming: bool = Field(default=True, alias="ENABLE_STREAMING")
     memory_limit_mb: int = Field(default=512, alias="MEMORY_LIMIT_MB")
+
+    # RAG (Retrieval Augmented Generation) settings
+    rag_db_path: str = Field(default="./temp/rag_indexing.sqlite3", alias="RAG_DB_PATH")
+    rag_enable_default: bool = Field(default=False, alias="RAG_ENABLE_DEFAULT")
+    rag_embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        alias="RAG_EMBEDDING_MODEL",
+    )
+    rag_chunk_size: int = Field(default=400, alias="RAG_CHUNK_SIZE")
+    rag_chunk_overlap: int = Field(default=80, alias="RAG_CHUNK_OVERLAP")
+    rag_retrieval_k: int = Field(default=12, alias="RAG_RETRIEVAL_K")
+    rag_similarity_threshold: float = Field(default=0.7, alias="RAG_SIMILARITY_THRESHOLD")
 
     # Zoom integration
     zoom_client_id: str = Field(default="", alias="ZOOM_CLIENT_ID")

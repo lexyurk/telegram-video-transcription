@@ -25,15 +25,15 @@ RUN pip install uv
 
 # Copy all project files (needed for building the package)
 COPY pyproject.toml ./
-COPY uv.lock ./
 COPY README.md ./
 COPY analytics.py ./
 COPY telegram_bot/ ./telegram_bot/
 COPY zoom_backend/ ./zoom_backend/
 COPY main.py ./
 
-# Install Python dependencies
-RUN uv sync --frozen
+# Install Python dependencies (generate lock file for linux/amd64)
+# Note: We don't copy uv.lock as it was generated on macOS and may have incompatible versions
+RUN uv sync
 
 # Create temp directory
 RUN mkdir -p ./temp

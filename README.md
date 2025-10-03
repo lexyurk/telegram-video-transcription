@@ -1,12 +1,15 @@
 # Telegram Video Transcription Bot
 
-A Telegram bot that transcribes video and audio files using Deepgram AI and creates summaries with action points using AI models (Google Gemini 2.5 Flash by default, with Claude AI support).
+A Telegram bot that transcribes video and audio files using Deepgram AI and creates summaries with action points using AI models (Claude Sonnet 4.5 by default, with Google Gemini 2.5 Flash support).
 
 ## Features
 
 - 🎥 **Video & Audio Transcription**: Supports multiple formats (MP4, AVI, MOV, MP3, WAV, etc.)
-- 🤖 **AI-Powered**: Uses Deepgram Nova-3 for transcription and AI models for summaries (Gemini 2.5 Flash by default, Claude support available)
-- 📊 **NEW: Diagram Generation**: Creates visual diagrams from transcripts using Mermaid (flowcharts, sequence diagrams, etc.)
+- 🤖 **AI-Powered**: Uses Deepgram Nova-2 for transcription and AI models for summaries (Claude Sonnet 4.5 by default, Gemini 2.5 Flash support available)
+- 🔍 **NEW: RAG-Powered Search**: Ask questions across all your meetings using semantic search with ChromaDB
+- 📊 **Diagram Generation**: Creates visual diagrams from transcripts using Mermaid (flowcharts, sequence diagrams, etc.)
+- 💬 **Transcript Q&A**: Ask questions about individual transcript files by replying to them
+- 📅 **Recording Date Tracking**: Automatically extracts and displays recording dates from video metadata
 - 🌍 **Automatic Language Detection**: No need to specify language - Deepgram detects automatically
 - 🎙️ **Speaker Diarization**: Identifies different speakers in conversations
 - 👥 **Smart Speaker Names**: AI-powered detection of actual speaker names from conversations
@@ -18,6 +21,7 @@ A Telegram bot that transcribes video and audio files using Deepgram AI and crea
 - 🔒 **Secure**: Environment-based configuration for API keys
 - 📊 **Comprehensive Logging**: Detailed logging for monitoring and debugging
 - 🐳 **Docker Support**: Easy deployment with Docker containers
+- 📈 **Analytics**: PostHog integration for usage tracking and insights
 
 ### 🔗 Zoom Integration (New)
 
@@ -47,12 +51,14 @@ Bot commands:
 ### Processing Pipeline
 
 1. **File Upload**: Upload video/audio files up to 2GB
-2. **Download**: Uses Bot API for small files (<50MB) or MTProto for large files  
-3. **Transcription**: Deepgram Nova-2 with speaker diarization and smart formatting
-4. **Speaker Identification**: AI analyzes conversation to identify actual speaker names
-5. **Name Replacement**: Replaces "Speaker 0" with real names like "Alexander"
-6. **Summarization**: AI creates summaries with action points in the same language (Gemini 2.5 Flash by default)
-7. **Delivery**: Sends transcript file and formatted summary
+2. **Download**: Uses Bot API for small files (<50MB) or MTProto for large files
+3. **Media Analysis**: Extracts recording date and duration metadata
+4. **Transcription**: Deepgram Nova-2 with speaker diarization and smart formatting
+5. **Speaker Identification**: AI analyzes conversation to identify actual speaker names
+6. **Name Replacement**: Replaces "Speaker 0" with real names like "Alexander"
+7. **Summarization**: AI creates summaries with action points in the same language (Claude Sonnet 4.5 by default)
+8. **RAG Indexing**: Automatically indexes transcripts for semantic search (if enabled)
+9. **Delivery**: Sends transcript file and formatted summary with recording date
 
 ### Speaker Identification
 
@@ -72,9 +78,9 @@ The bot includes an intelligent speaker identification system:
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 - **Telegram API Credentials** (from [my.telegram.org](https://my.telegram.org/auth)) - Required for large file downloads
 - [Deepgram API Key](https://deepgram.com/)
-- **AI Model API Key** (choose one):
-  - [Google API Key](https://makersuite.google.com/app/apikey) for Gemini (default)
-  - [Anthropic API Key](https://console.anthropic.com/) for Claude (alternative)
+- **AI Model API Key** (at least one required):
+  - [Anthropic API Key](https://console.anthropic.com/) for Claude Sonnet 4.5 (default, recommended)
+  - [Google API Key](https://makersuite.google.com/app/apikey) for Gemini 2.5 Flash (alternative)
 
 ## Installation
 
@@ -151,16 +157,25 @@ The bot includes an intelligent speaker identification system:
    TELEGRAM_API_HASH=your_telegram_api_hash
    DEEPGRAM_API_KEY=your_deepgram_key
    
-   # AI Models (at least one required)
-   GOOGLE_API_KEY=your_google_key
+   # AI Models (at least one required - Anthropic recommended)
    ANTHROPIC_API_KEY=your_anthropic_key
-   
+   GOOGLE_API_KEY=your_google_key
+
    # Optional (defaults shown)
    MAX_FILE_SIZE_MB=2048
    LOG_LEVEL=INFO
    DEEPGRAM_MODEL=nova-2
+   CLAUDE_MODEL=claude-sonnet-4-5-20250929
    GEMINI_MODEL=gemini-2.5-flash
-   CLAUDE_MODEL=claude-sonnet-4-20250514
+
+   # RAG (Retrieval Augmented Generation) for meeting search
+   RAG_ENABLE_DEFAULT=false
+   RAG_CHUNK_SIZE=400
+   RAG_RETRIEVAL_K=12
+
+   # Analytics (optional)
+   POSTHOG_API_KEY=
+   POSTHOG_HOST=https://app.posthog.com
 
     # Zoom integration
     ZOOM_CLIENT_ID=
@@ -208,8 +223,8 @@ The bot includes an intelligent speaker identification system:
 | `TELEGRAM_API_ID` | Telegram API ID from my.telegram.org | Required |
 | `TELEGRAM_API_HASH` | Telegram API Hash from my.telegram.org | Required |
 | `DEEPGRAM_API_KEY` | Deepgram API key for transcription | Required |
-| `GOOGLE_API_KEY` | Google API key for Gemini models (auto-detected) | Optional |
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models (auto-detected) | Optional |
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models (default, recommended) | At least one required |
+| `GOOGLE_API_KEY` | Google API key for Gemini models (alternative) | At least one required |
 | `MAX_FILE_SIZE_MB` | Maximum file size in MB | 2048 (2GB) |
 | `TEMP_DIR` | Directory for temporary files | ./temp |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
@@ -218,8 +233,15 @@ The bot includes an intelligent speaker identification system:
 | `ENABLE_PUNCTUATION` | Enable automatic punctuation | true |
 | `ENABLE_PARAGRAPHS` | Enable paragraph formatting | true |
 | `ENABLE_SMART_FORMAT` | Enable smart formatting | true |
+| `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-5-20250929 |
 | `GEMINI_MODEL` | Gemini model to use | gemini-2.5-flash |
-| `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-20250514 |
+| `RAG_ENABLE_DEFAULT` | Enable automatic RAG indexing for all transcripts | false |
+| `RAG_CHUNK_SIZE` | Size of text chunks for RAG indexing | 400 |
+| `RAG_CHUNK_OVERLAP` | Overlap between chunks | 80 |
+| `RAG_RETRIEVAL_K` | Number of results to retrieve | 12 |
+| `RAG_SIMILARITY_THRESHOLD` | Minimum similarity score for results | 0.7 |
+| `POSTHOG_API_KEY` | PostHog API key for analytics | Optional |
+| `POSTHOG_HOST` | PostHog server URL | https://app.posthog.com |
 | `ZOOM_CLIENT_ID` | Zoom OAuth client id | Optional |
 | `ZOOM_CLIENT_SECRET` | Zoom OAuth client secret | Optional |
 | `ZOOM_REDIRECT` | Zoom redirect URL (must match app) | Optional |
@@ -249,10 +271,41 @@ The bot includes an intelligent speaker identification system:
 - `/start` - Show welcome message and instructions
 - `/help` - Show help information
 - `/diagram` - Create a diagram from a transcript (reply to a .txt file)
+- `/connect` - Connect your Zoom account for automatic recording processing
+- `/status` - Check Zoom integration backend status
+- `/disconnect` - Disconnect your Zoom account
+- **Reply to transcript files** - Ask questions about a specific transcript by replying to the .txt file
 
-### 📊 Diagram Generation (NEW!)
+### 💬 Transcript Q&A
 
-The bot now supports creating visual diagrams from transcripts using AI and Mermaid:
+Ask questions about individual transcript files by simply replying to them:
+
+1. **Get a transcript** by sending a video/audio file to the bot
+2. **Reply to the transcript file** with your question
+3. **Get an AI-powered answer** using Claude Sonnet 4.5
+
+**Example Questions:**
+- "What were the main action items?"
+- "Who were the participants in this meeting?"
+- "What was discussed about the project timeline?"
+- "Summarize the key decisions made"
+
+### 🔍 RAG-Powered Meeting Search (NEW!)
+
+Search across all your transcripts using semantic search powered by ChromaDB and sentence transformers:
+
+**Features:**
+- 🧠 **Semantic Understanding**: Finds relevant information even if exact words don't match
+- 🎯 **Contextual Answers**: Combines information from multiple meetings
+- 📅 **Temporal Filtering**: Search within specific date ranges
+- 🗂️ **Automatic Indexing**: All transcripts are automatically indexed (when enabled)
+
+**Configuration:**
+Set `RAG_ENABLE_DEFAULT=true` in your `.env` file to enable automatic indexing of all transcripts.
+
+### 📊 Diagram Generation
+
+The bot supports creating visual diagrams from transcripts using AI and Mermaid:
 
 #### How to Use:
 1. **Get a transcript** by sending a video/audio file to the bot
@@ -318,15 +371,24 @@ telegram-video-transcription/
 │   ├── services/                  # Services package
 │   │   ├── __init__.py           # Services package init
 │   │   ├── transcription_service.py      # Deepgram transcription service
-│   │   ├── ai_model.py                   # AI model abstraction (Gemini/Claude)
+│   │   ├── ai_model.py                   # AI model abstraction (Claude/Gemini)
 │   │   ├── summarization_service.py      # AI summarization service
 │   │   ├── speaker_identification_service.py # AI speaker name identification
+│   │   ├── question_answering_service.py # Q&A service for transcripts
+│   │   ├── diagram_service.py            # Diagram generation service
+│   │   ├── media_info_service.py         # Media metadata extraction
+│   │   ├── rag_indexing_service.py       # RAG indexing service
+│   │   ├── rag_query_service.py          # RAG search service
+│   │   ├── rag_storage_service.py        # RAG storage service
+│   │   ├── rag_intent_parser.py          # RAG query parser
 │   │   └── file_service.py               # File operations service
 │   └── mtproto_downloader.py      # Large file downloader via MTProto
+├── analytics.py                   # PostHog analytics integration
 ├── tests/                         # Test files
 ├── main.py                        # Root entry point
 ├── pyproject.toml                 # Project configuration
 ├── Dockerfile                     # Docker configuration
+├── docker-compose.yml             # Docker Compose configuration
 ├── .env.example                   # Environment variables template
 └── README.md                      # This file
 ```
@@ -338,15 +400,20 @@ telegram-video-transcription/
 - **Docs**: https://developers.deepgram.com/
 - **Models**: Nova-2 (default), Whisper, etc.
 
-### Google Gemini (Default AI Provider)
-- **Website**: https://ai.google.dev/
-- **Docs**: https://ai.google.dev/docs
-- **Models**: Gemini-2.5-Flash (default), Gemini-1.5-Pro, etc.
-
-### Anthropic Claude (Alternative AI Provider)
+### Anthropic Claude (Default AI Provider)
 - **Website**: https://www.anthropic.com/
 - **Docs**: https://docs.anthropic.com/
-- **Models**: Claude-4-Sonnet, Claude-3.5-Sonnet, Claude-3-Haiku, etc.
+- **Models**: Claude-Sonnet-4.5 (default), Claude-3.5-Sonnet, Claude-3-Haiku, etc.
+
+### Google Gemini (Alternative AI Provider)
+- **Website**: https://ai.google.dev/
+- **Docs**: https://ai.google.dev/docs
+- **Models**: Gemini-2.5-Flash, Gemini-1.5-Pro, etc.
+
+### ChromaDB (Vector Database for RAG)
+- **Website**: https://www.trychroma.com/
+- **Docs**: https://docs.trychroma.com/
+- **Purpose**: Semantic search across meeting transcripts
 
 ## Contributing
 
@@ -370,25 +437,44 @@ For issues and questions:
 
 ## Changelog
 
+### v0.5.0 (Latest)
+- **NEW**: 🔍 **RAG-Powered Meeting Search** - Semantic search across all transcripts using ChromaDB
+- **NEW**: 💬 **Transcript Q&A** - Ask questions about individual transcripts by replying to them
+- **NEW**: 📅 **Recording Date Tracking** - Automatically extracts and displays recording dates from media
+- **NEW**: 📈 **PostHog Analytics** - Track usage patterns and user behavior
+- **IMPROVED**: Switched to Claude Sonnet 4.5 as default AI model (upgraded from Gemini)
+- **ADDED**: RAG indexing service with automatic transcript chunking and vectorization
+- **ADDED**: RAG query service with intent parsing and temporal filtering
+- **ADDED**: Media info service for extracting duration and recording dates
+- **ADDED**: Question answering service for individual transcript analysis
+- **ENHANCED**: User tracking with Telegram ID as primary identifier
+- **ENHANCED**: Analytics integration across bot and Zoom backend
+
+### v0.4.0
+- **NEW**: 🔗 **Zoom Integration** - Automatic processing of Zoom cloud recordings
+- **NEW**: `/connect` command - Connect Zoom account via OAuth
+- **NEW**: `/status` and `/disconnect` commands for Zoom integration
+- **ADDED**: FastAPI backend for Zoom webhooks and OAuth
+- **ADDED**: Docker Compose setup with reverse proxy and SSL support
+- **ENHANCED**: Speaker identification improvements for Zoom recordings
+
 ### v0.3.0
-- **NEW**: 📊 **Diagram Generation Feature** - Create visual diagrams from transcripts using AI and Mermaid
+- **NEW**: 📊 **Diagram Generation** - Create visual diagrams from transcripts using AI and Mermaid
 - **NEW**: `/diagram` command - Reply to transcript files to generate diagrams
-- **NEW**: Custom diagram prompts - Guide what the diagram should show (e.g., `/diagram show decision flow`)
-- **NEW**: AI-powered diagram type selection - Automatically chooses best diagram type (flowchart, sequence, graph, etc.)
-- **NEW**: Mermaid-cli integration - High-quality PNG generation with dark theme
-- **NEW**: DiagramService - Clean service architecture for diagram generation
-- **ADDED**: Node.js and mermaid-cli setup scripts for easy installation
-- **ENHANCED**: Updated help messages and documentation with diagram examples
+- **NEW**: Custom diagram prompts - Guide what the diagram should show
+- **ADDED**: AI-powered diagram type selection (flowchart, sequence, graph, etc.)
+- **ADDED**: Mermaid-cli integration with high-quality PNG generation
+- **ADDED**: Node.js and mermaid-cli setup scripts
 
 ### v0.2.0
-- **NEW**: AI Model Selection - Automatic detection between Google Gemini 2.5 Flash (priority) and Claude AI
-- **NEW**: Google Gemini 2.5 Flash support with faster processing and improved quality  
-- **IMPROVED**: Clean AI model abstraction with separate services architecture
-- **SIMPLIFIED**: No manual model selection - automatically uses available API keys (Gemini priority)
-- **ENHANCED**: Comprehensive test coverage for AI model abstraction (25+ tests)
+- **NEW**: AI Model Selection - Automatic detection between Google Gemini and Claude
+- **NEW**: Google Gemini 2.5 Flash support
+- **IMPROVED**: Clean AI model abstraction with separate services
+- **ENHANCED**: Comprehensive test coverage for AI model abstraction
 
 ### v0.1.0
 - Initial release
 - Basic transcription and summarization functionality
+- Speaker diarization and identification
 - Docker support
 - Comprehensive logging

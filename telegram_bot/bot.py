@@ -58,45 +58,54 @@ class TelegramTranscriptionBot:
     ) -> None:
         """Handle the /start command."""
         settings = get_settings()
-        
+
         # Determine which AI model is being used
-        ai_provider = "Gemini 2.5 Flash" if settings.google_api_key else "Claude AI"
-        
+        ai_provider = "Claude Sonnet 4.5" if settings.anthropic_api_key else "Gemini 2.5 Flash"
+
         welcome_message = f"""
 🎥 **Video/Audio Transcription Bot** 🎙️
 
-Welcome! I can transcribe your video and audio files and create summaries with action points using {ai_provider}.
+Welcome! I'm your AI-powered transcription assistant. I can help you transcribe videos, create summaries, answer questions, and visualize meeting content using **{ai_provider}** and **Deepgram Nova-2**.
 
-**How it works:**
-1. Send me any video or audio file (up to 2GB!)
-2. I'll transcribe it and send you a .txt file
-3. I'll also create a summary with key points
+**✨ Core Capabilities:**
 
-**Supported formats:**
-• **Video:** MP4, AVI, MOV, MKV, WMV, WebM
-• **Audio:** MP3, WAV, AAC, FLAC, OGG, M4A
+🎬 **Transcription & Summarization**
+• Transcribe video/audio files up to **2GB** in size
+• Automatic speaker diarization (identifies who spoke)
+• Smart speaker name detection from conversation
+• AI-generated summaries with action points
+• Extracts recording date and duration metadata
 
-**Commands:**
-/start - Show this message
-/help - Show help
-/diagram - Create a diagram from a transcript (reply to a .txt file)
-/connect - Connect your Zoom account to receive recordings here
-/status - Show Zoom connection status
-/disconnect - Disconnect your Zoom account
-
-**🆕 New Features:**
-
-**🤖 Ask Questions About Transcripts (Claude Sonnet 4):**
+💬 **Transcript Q&A**
 • Reply to any transcript file with your question
-• Get detailed answers about the content using Claude Sonnet 4
-• Examples: "What were the main decisions made?", "Who spoke the most?", "What are the action items?"
+• Get AI-powered answers using {ai_provider}
+• Examples: "What were the action items?", "Who participated?", "Summarize key decisions"
 
-**📊 Diagram Generation:**
-• Reply to any transcript file with `/diagram` to create a visual diagram
-• Use `/diagram <custom prompt>` to specify what the diagram should show
-• Examples: `/diagram show the decision flow`, `/diagram map relationships`
+📊 **Diagram Generation**
+• Create visual diagrams from transcripts
+• Reply to transcript with `/diagram` command
+• Custom prompts: `/diagram show decision flow`
+• Auto-generates flowcharts, sequences, graphs, etc.
 
-Just send me a file and I'll handle the rest! 🚀
+🔗 **Zoom Integration**
+• Connect your Zoom account to auto-process recordings
+• Receive transcripts in Telegram when meetings end
+• Use `/connect` to link your account
+
+**📋 Available Commands:**
+/start - Show this welcome message
+/help - Show detailed help and features
+/diagram - Create diagram from transcript (reply to .txt file)
+/connect - Connect Zoom account
+/status - Check Zoom connection status
+/disconnect - Disconnect Zoom account
+
+**🎯 Supported Formats:**
+• **Video:** MP4, AVI, MOV, MKV, WMV, FLV, WebM
+• **Audio:** MP3, WAV, AAC, FLAC, OGG, M4A, WMA
+
+**🚀 Quick Start:**
+Just send me any video or audio file and I'll transcribe it for you!
         """
 
         await update.message.reply_text(welcome_message, parse_mode="Markdown")
@@ -185,7 +194,93 @@ Just send me a file and I'll handle the rest! 🚀
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         """Handle the /help command."""
-        await self.start_command(update, context)
+        settings = get_settings()
+        ai_provider = "Claude Sonnet 4.5" if settings.anthropic_api_key else "Gemini 2.5 Flash"
+
+        help_message = f"""
+📖 **Help & Features Guide**
+
+**🎯 What I Can Do:**
+
+**1️⃣ Transcribe Audio & Video**
+Send me any media file (up to 2GB) and I'll:
+• Extract audio and transcribe it using Deepgram Nova-2
+• Identify different speakers automatically
+• Detect actual speaker names from conversation
+• Add timestamps and professional formatting
+• Extract recording date from file metadata
+
+**2️⃣ Generate Smart Summaries**
+After transcription, I'll create:
+• Concise summary of main topics
+• Action items and decisions
+• Key discussion points
+• All in the original language using {ai_provider}
+
+**3️⃣ Answer Questions About Transcripts**
+Reply to any transcript file with your question:
+• "What were the main action items?"
+• "Who were the participants?"
+• "What was discussed about X?"
+• "Summarize the key decisions"
+Powered by {ai_provider} for accurate answers.
+
+**4️⃣ Create Visual Diagrams**
+Reply to a transcript with `/diagram`:
+• `/diagram` - Auto-generate relevant diagram
+• `/diagram show decision flow` - Custom focus
+• `/diagram map relationships` - Relationship view
+Creates flowcharts, sequences, graphs, etc.
+
+**5️⃣ Zoom Integration**
+Connect your Zoom account:
+• Auto-process cloud recordings
+• Get transcripts in Telegram when meetings end
+• Use `/connect` to set up
+
+**📋 All Commands:**
+
+/start - Welcome message with quick overview
+/help - This detailed help guide
+/diagram - Create diagram (reply to transcript)
+/connect - Link Zoom account
+/status - Check Zoom connection
+/disconnect - Unlink Zoom account
+
+**🎯 Supported Formats:**
+
+**Video Files:**
+MP4, AVI, MOV, MKV, WMV, FLV, WebM
+
+**Audio Files:**
+MP3, WAV, AAC, FLAC, OGG, M4A, WMA
+
+**Voice Messages:**
+Telegram voice messages and video notes
+
+**💡 Pro Tips:**
+
+✅ Files up to 2GB are supported
+✅ Automatic language detection (no setup needed)
+✅ Speaker diarization enabled by default
+✅ Recording date automatically extracted
+✅ Progress updates during processing
+
+**🚀 Getting Started:**
+
+1. Send any video/audio file
+2. Wait for transcription (I'll show progress)
+3. Receive transcript file + summary
+4. Ask questions by replying to transcript
+5. Create diagrams with `/diagram` command
+
+**❓ Questions?**
+Just send me a file and I'll handle everything automatically!
+        """
+
+        await update.message.reply_text(help_message, parse_mode="Markdown")
+        logger.info(f"User {update.effective_user.id} requested help")
+
         try:
             user = update.effective_user
             self._identify_telegram_user(user)

@@ -24,6 +24,7 @@ from telegram_bot.services import (
     DiagramService,
     QuestionAnsweringService,
     MediaInfoService,
+    RAGStorageService,
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 from analytics import analytics, tg_distinct_id
@@ -41,6 +42,7 @@ class TelegramTranscriptionBot:
         self.diagram_service = DiagramService()
         self.question_answering_service = QuestionAnsweringService()
         self.media_info_service = MediaInfoService()
+        self.rag_storage_service = RAGStorageService()
         self.mtproto_downloader = MTProtoDownloader()
 
     async def initialize(self) -> None:
@@ -96,6 +98,7 @@ Welcome! I'm your AI-powered transcription assistant. I can help you transcribe 
 /start - Show this welcome message
 /help - Show detailed help and features
 /diagram - Create diagram from transcript (reply to .txt file)
+/memory - Toggle meeting memory for semantic search
 /connect - Connect Zoom account
 /status - Check Zoom connection status
 /disconnect - Disconnect Zoom account
@@ -190,6 +193,94 @@ Just send me any video or audio file and I'll transcribe it for you!
         except Exception:
             pass
 
+    async def memory_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Toggle RAG indexing (semantic memory) for this user."""
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        distinct_id = tg_distinct_id(user_id)
+
+        try:
+            self._identify_telegram_user(update.effective_user)
+        except Exception:
+            pass
+
+        # Check current status
+        current_status = self.rag_storage_service.is_indexing_enabled(user_id, chat_id)
+
+        # If command has arguments, treat as enable/disable
+        if context.args:
+            arg = context.args[0].lower()
+            if arg in ["on", "enable", "enabled", "true", "1", "yes"]:
+                self.rag_storage_service.set_indexing_enabled(user_id, chat_id, True)
+                await update.message.reply_text(
+                    "✅ **Meeting Memory Enabled**\n\n"
+                    "Your transcripts will now be automatically indexed for semantic search. "
+                    "You can search across all your meetings and ask questions that span multiple conversations.\n\n"
+                    "Use `/memory off` to disable."
+                )
+                try:
+                    analytics.capture(distinct_id, "command_rag_enable")
+                except Exception:
+                    pass
+                return
+            elif arg in ["off", "disable", "disabled", "false", "0", "no"]:
+                self.rag_storage_service.set_indexing_enabled(user_id, chat_id, False)
+                await update.message.reply_text(
+                    "❌ **Meeting Memory Disabled**\n\n"
+                    "Your future transcripts will not be indexed. "
+                    "Existing indexed data remains available.\n\n"
+                    "Use `/memory on` to enable."
+                )
+                try:
+                    analytics.capture(distinct_id, "command_rag_disable")
+                except Exception:
+                    pass
+                return
+
+        # No valid argument, show status and toggle
+        new_status = not current_status
+        self.rag_storage_service.set_indexing_enabled(user_id, chat_id, new_status)
+
+        if new_status:
+            status_message = """
+✅ **Meeting Memory Enabled**
+
+Your transcripts will now be automatically indexed for semantic search across all your meetings.
+
+**What this means:**
+• All future transcripts are indexed into ChromaDB
+• Search across multiple meetings semantically
+• Ask questions that span conversations
+• Find information even if exact words don't match
+
+**Usage:**
+Use `/memory off` to disable indexing
+            """
+            try:
+                analytics.capture(distinct_id, "command_rag_toggle_on")
+            except Exception:
+                pass
+        else:
+            status_message = """
+❌ **Meeting Memory Disabled**
+
+Your future transcripts will not be indexed for search.
+
+**What this means:**
+• New transcripts won't be added to search index
+• Existing indexed data remains available
+• You can still use transcript Q&A by replying to files
+
+**Usage:**
+Use `/memory on` to enable indexing
+            """
+            try:
+                analytics.capture(distinct_id, "command_rag_toggle_off")
+            except Exception:
+                pass
+
+        await update.message.reply_text(status_message.strip(), parse_mode="Markdown")
+
     async def help_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -232,7 +323,15 @@ Reply to a transcript with `/diagram`:
 • `/diagram map relationships` - Relationship view
 Creates flowcharts, sequences, graphs, etc.
 
-**5️⃣ Zoom Integration**
+**5️⃣ Meeting Memory (RAG Search)**
+Enable semantic search across all your meetings:
+• Toggle with `/memory` or `/memory on/off`
+• Search across multiple transcripts
+• Find information even if exact words don't match
+• Ask questions that span conversations
+When enabled, all transcripts are indexed automatically.
+
+**6️⃣ Zoom Integration**
 Connect your Zoom account:
 • Auto-process cloud recordings
 • Get transcripts in Telegram when meetings end
@@ -243,6 +342,7 @@ Connect your Zoom account:
 /start - Welcome message with quick overview
 /help - This detailed help guide
 /diagram - Create diagram (reply to transcript)
+/memory - Toggle meeting memory (on/off/toggle)
 /connect - Link Zoom account
 /status - Check Zoom connection
 /disconnect - Unlink Zoom account
@@ -1180,6 +1280,7 @@ Just send me a file and I'll handle everything automatically!
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("help", self.help_command))
         application.add_handler(CommandHandler("diagram", self.diagram_command))
+        application.add_handler(CommandHandler("memory", self.memory_command))
         application.add_handler(CommandHandler("connect", self.connect_command))
         application.add_handler(CommandHandler("status", self.status_command))
         application.add_handler(CommandHandler("disconnect", self.disconnect_command))

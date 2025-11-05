@@ -113,3 +113,8 @@ celerybeat.pid
 
 # mypy
 .mypy_cache/
+
+# Node/Bun
+node_modules/
+website/dist/
+bun.lockb

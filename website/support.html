@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support - Transcription Bot</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="main-container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-brand">TRANSCRIPTION BOT</div>
+            <ul class="nav-menu">
+                <li><a href="index.html">HOME</a></li>
+                <li><a href="support.html" class="active">SUPPORT</a></li>
+                <li><a href="privacy.html">PRIVACY</a></li>
+                <li><a href="terms.html">TERMS</a></li>
+            </ul>
+        </nav>
+
+        <!-- Breadcrumb -->
+        <div class="breadcrumb-container">
+            <div class="breadcrumb">
+                <a href="index.html">HOME</a>
+                <span>></span>
+                <span>SUPPORT</span>
+            </div>
+        </div>
+
+    <!-- Content -->
+    <div class="page-container">
+        <h1 class="page-title">Support & Help Center</h1>
+        <p class="page-subtitle">Get help with Transcription Bot</p>
+
+        <div class="content-block">
+            <h2>Getting Started</h2>
+            <p>Welcome to Transcription Bot! Here's how to start using our service:</p>
+            <ol>
+                <li><strong>Find the bot on Telegram:</strong> Search for our bot in Telegram and start a conversation</li>
+                <li><strong>Send a file:</strong> Upload any audio or video file (up to 2GB)</li>
+                <li><strong>Wait for processing:</strong> We'll transcribe your file automatically</li>
+                <li><strong>Receive results:</strong> Get your transcript and AI-generated summary</li>
+            </ol>
+        </div>
+
+        <div class="content-block">
+            <h2>Zoom Integration Setup</h2>
+            <p>Connect your Zoom account to automatically process recordings:</p>
+            <ol>
+                <li>Send the <code>/connect</code> command to the bot</li>
+                <li>Click the authorization link</li>
+                <li>Log in to your Zoom account and authorize the app</li>
+                <li>Done! Your recordings will be processed automatically</li>
+            </ol>
+            <p>To disconnect your Zoom account, send <code>/disconnect</code> to the bot or uninstall the app from your Zoom Marketplace.</p>
+        </div>
+
+        <div class="content-block" id="faq">
+            <h2>Frequently Asked Questions</h2>
+
+            <h3>What file formats are supported?</h3>
+            <p><strong>Video formats:</strong> MP4, AVI, MOV, MKV, WMV, FLV, WebM</p>
+            <p><strong>Audio formats:</strong> MP3, WAV, AAC, FLAC, OGG, M4A, WMA</p>
+            <p>Telegram voice messages and video notes are also supported.</p>
+
+            <h3>What's the maximum file size?</h3>
+            <p>We support files up to 2GB (2048MB) in size. For videos, we recommend extracting audio-only versions to reduce file size.</p>
+
+            <h3>How accurate are the transcriptions?</h3>
+            <p>We use Deepgram's Nova-2 model, which provides high accuracy for clear audio. Transcription quality depends on:</p>
+            <ul>
+                <li>Audio clarity and background noise levels</li>
+                <li>Speaker pronunciation and accents</li>
+                <li>Technical terminology or specialized vocabulary</li>
+            </ul>
+
+            <h3>Can I ask questions about my transcripts?</h3>
+            <p>Yes! Simply reply to any transcript file with your question, and our AI will analyze the content and provide an answer. Examples:</p>
+            <ul>
+                <li>"What were the main action items?"</li>
+                <li>"Who were the participants?"</li>
+                <li>"What was discussed about the project timeline?"</li>
+            </ul>
+
+            <h3>How does speaker identification work?</h3>
+            <p>Our AI automatically identifies different speakers and labels them. We also use advanced AI to detect actual names mentioned in conversations, replacing generic labels like "Speaker 0" with real names when possible.</p>
+
+            <h3>What is Meeting Memory (RAG)?</h3>
+            <p>Meeting Memory enables semantic search across all your transcripts. When enabled with <code>/memory on</code>, your transcripts are indexed and you can search across multiple meetings to find information, even when exact words don't match.</p>
+
+            <h3>How can I create diagrams from transcripts?</h3>
+            <p>Reply to any transcript file with <code>/diagram</code> to generate a visual diagram. You can also add custom instructions:</p>
+            <ul>
+                <li><code>/diagram show the decision flow</code></li>
+                <li><code>/diagram map relationships between people</code></li>
+                <li><code>/diagram create a process flowchart</code></li>
+            </ul>
+
+            <h3>How long does processing take?</h3>
+            <p>Processing time depends on file size and duration:</p>
+            <ul>
+                <li>Small files (&lt;50MB): 1-3 minutes</li>
+                <li>Medium files (50-500MB): 3-10 minutes</li>
+                <li>Large files (500MB-2GB): 10-30 minutes</li>
+            </ul>
+            <p>You'll see real-time progress updates during processing.</p>
+
+            <h3>Is my data secure?</h3>
+            <p>Yes. We use encryption for all data transmission, and temporary files are automatically deleted after processing. See our <a href="privacy.html">Privacy Policy</a> for details.</p>
+
+            <h3>What happens to my Zoom recordings?</h3>
+            <p>When connected, we automatically download audio from your completed Zoom cloud recordings, process them, and deliver transcripts to Telegram. The original recordings remain in your Zoom account.</p>
+
+            <h3>Can I delete my data?</h3>
+            <p>Yes. Contact us to request deletion of your data. You can also disconnect your Zoom account at any time, which will remove your access tokens.</p>
+        </div>
+
+        <div class="content-block">
+            <h2>Bot Commands</h2>
+            <p>Available commands in the Telegram bot:</p>
+            <ul>
+                <li><code>/start</code> - Show welcome message and overview</li>
+                <li><code>/help</code> - Display detailed help guide</li>
+                <li><code>/diagram</code> - Create diagram from transcript (reply to transcript file)</li>
+                <li><code>/memory</code> - Toggle meeting memory on/off</li>
+                <li><code>/connect</code> - Connect your Zoom account</li>
+                <li><code>/status</code> - Check Zoom connection status</li>
+                <li><code>/disconnect</code> - Get instructions to disconnect Zoom</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h2>Troubleshooting</h2>
+
+            <h3>Processing failed or transcript is empty</h3>
+            <ul>
+                <li>Check that your file contains actual audio content</li>
+                <li>Ensure audio quality is clear enough for transcription</li>
+                <li>Try re-uploading the file</li>
+                <li>For videos, try extracting audio-only version</li>
+            </ul>
+
+            <h3>File upload failed</h3>
+            <ul>
+                <li>Check your file size (must be under 2GB)</li>
+                <li>Verify the file format is supported</li>
+                <li>Check your internet connection</li>
+                <li>Try compressing large video files</li>
+            </ul>
+
+            <h3>Zoom integration not working</h3>
+            <ul>
+                <li>Ensure you've completed the OAuth authorization</li>
+                <li>Check that your Zoom account has cloud recording enabled</li>
+                <li>Verify recordings are set to automatically save to the cloud</li>
+                <li>Try disconnecting and reconnecting your account</li>
+            </ul>
+
+            <h3>Speaker names not detected</h3>
+            <p>Speaker name detection works best when:</p>
+            <ul>
+                <li>Participants introduce themselves</li>
+                <li>Speakers address each other by name</li>
+                <li>Audio is clear and speakers are distinct</li>
+            </ul>
+            <p>If names can't be detected, we use generic labels like "Speaker 0", "Speaker 1", etc.</p>
+        </div>
+
+        <div class="content-block">
+            <h2>Best Practices</h2>
+            <ul>
+                <li><strong>For best transcription quality:</strong> Use clear audio with minimal background noise</li>
+                <li><strong>For large files:</strong> Consider uploading audio-only versions instead of full video</li>
+                <li><strong>For Zoom recordings:</strong> Enable cloud recording in your Zoom settings</li>
+                <li><strong>For speaker detection:</strong> Encourage participants to introduce themselves</li>
+                <li><strong>For better summaries:</strong> Structured meetings with clear agenda items work best</li>
+            </ul>
+        </div>
+
+        <div class="contact-info">
+            <h3>Still Need Help?</h3>
+            <p>If you have questions not covered here, need technical support, or want to report an issue, please reach out to us.</p>
+            <p><strong>Note:</strong> For data deletion requests, privacy concerns, or Zoom integration issues, please include your Telegram user ID in your message.</p>
+            <p>We aim to respond to all inquiries within 24-48 hours.</p>
+        </div>
+
+        <div class="highlight-box">
+            <h3>Tips for Getting Help Faster</h3>
+            <ul>
+                <li>Include your Telegram username (if you're comfortable sharing)</li>
+                <li>Describe the issue with as much detail as possible</li>
+                <li>Mention any error messages you received</li>
+                <li>Include file sizes and formats if relevant</li>
+                <li>Let us know what troubleshooting steps you've already tried</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>About</h4>
+                <p>AI-powered transcription service that seamlessly integrates with Zoom and Telegram, 
+                transforming your meetings into actionable insights.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Legal</h4>
+                <ul>
+                    <li><a href="terms.html">Terms of Service</a></li>
+                    <li><a href="privacy.html">Privacy Policy</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Support</h4>
+                <ul>
+                    <li><a href="support.html">Contact Us</a></li>
+                    <li><a href="support.html#faq">FAQ</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Transcription Bot. All rights reserved.</p>
+        </div>
+    </footer>
+    </div>
+</body>
+</html>
+

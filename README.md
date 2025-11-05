@@ -256,6 +256,96 @@ The bot includes an intelligent speaker identification system:
 - `reverse-proxy`: Nginx proxy for backend on 80/443 with ACME webroot
 - `certbot`: renews certificates periodically via webroot
 
+## Deployment
+
+### Website (Vercel)
+
+The website is built with **Bun + Vite** for modern, fast frontend development with proper environment variable handling.
+
+#### Local Development
+
+1. **Install dependencies**:
+   ```bash
+   cd website
+   bun install
+   ```
+
+2. **Create `.env` file** in the `website/` directory:
+   ```bash
+   VITE_TELEGRAM_BOT_USERNAME=@your_bot_username
+   VITE_WEBSITE_URL=https://your-domain.com
+   ```
+
+3. **Run development server**:
+   ```bash
+   bun run dev
+   ```
+
+4. **Build for production**:
+   ```bash
+   bun run build
+   ```
+
+#### Vercel Deployment
+
+1. **Push to GitHub** (if not already done):
+   ```bash
+   git add .
+   git commit -m "Add website for deployment"
+   git push
+   ```
+
+2. **Import to Vercel**:
+   - Go to [vercel.com](https://vercel.com) and sign in
+   - Click "New Project" and import your repository
+   - Vercel will detect the Vite configuration automatically
+
+3. **Set Environment Variables**:
+   - In Vercel Dashboard → Settings → Environment Variables, add:
+     - `VITE_TELEGRAM_BOT_USERNAME` = `@transcribi_bot`
+     - `VITE_WEBSITE_URL` = `https://transcribiscie.app`
+   
+   **Note**: Vite will automatically inject these values at build time.
+
+4. **Add Custom Domain**:
+   - Go to Settings → Domains
+   - Add `transcribiscie.app`
+   - Update your DNS records as instructed by Vercel:
+     - Add an A record pointing to Vercel's IP
+     - Or add a CNAME record pointing to your Vercel project
+
+5. **Deploy**:
+   - Click "Deploy" or push to your main branch
+   - Your site will be live at `https://transcribiscie.app`
+
+#### Configuration Files
+
+The website deployment is configured through:
+- `website/package.json` - Bun dependencies and scripts
+- `website/vite.config.js` - Vite build configuration
+- `website/main.js` - Main JavaScript entry point
+- `vercel.json` - Vercel deployment settings
+
+#### Manual Deployment (Optional)
+
+You can also deploy using the Vercel CLI:
+
+```bash
+npm install -g vercel
+vercel --prod
+```
+
+### Telegram Bot & Backend (Docker)
+
+The Telegram bot and Zoom backend should be deployed to a server with Docker:
+
+1. Set up a VPS (e.g., DigitalOcean, AWS, Hetzner)
+2. Configure environment variables in `.env`
+3. Run with Docker Compose:
+   ```bash
+   docker-compose up --build -d
+   ```
+
 ## Usage
 
 1. **Start the bot** by running it with one of the methods above

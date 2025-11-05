@@ -1,0 +1,32 @@
+# Python files and directories
+telegram_bot/
+zoom_backend/
+tests/
+temp/
+*.pyc
+__pycache__/
+*.py
+*.lock
+pyproject.toml
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Scripts and docs
+scripts/
+docs/
+
+# Git and environment
+.git/
+.env
+.env.*
+
+# Development files
+Makefile
+analytics.py
+main.py
+
+# Keep only website directory
+!website/
+

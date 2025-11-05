@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transcription Bot - AI-Powered Meeting Transcription</title>
+    <title>Transcribiscie app - AI-Powered Meeting Transcription</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
     <div class="main-container">
         <!-- Navigation -->
         <nav class="navbar">
-            <div class="nav-brand">TRANSCRIPTION BOT</div>
+            <div class="nav-brand">TRANSCRIBISCIE APP</div>
             <ul class="nav-menu">
                 <li><a href="index.html" class="active">HOME</a></li>
                 <li><a href="support.html">SUPPORT</a></li>
@@ -38,8 +38,8 @@
         <div class="hero-content">
             <h1 class="hero-title">AI-POWERED MEETING TRANSCRIPTION</h1>
             <p class="hero-description">
-                From Zoom recordings to Telegram delivery, we transform your meetings into actionable 
-                insights with AI-powered transcription, speaker identification, and intelligent summaries.
+                Get transcripts, action points, diagrams, and answers—all delivered automatically 
+                to Telegram right after your Zoom calls. No manual work, just instant insights.
             </p>
             <a href="#" id="telegram-bot-link" class="cta-button" target="_blank" rel="noopener noreferrer" style="display: none;">
                 <i class="fab fa-telegram"></i> Get Started
@@ -50,32 +50,56 @@
     <!-- Features Grid -->
     <section class="features-grid">
         <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-microphone"></i></div>
-            <h3 class="feature-title">Automatic Transcription & Summaries</h3>
+            <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+            <h3 class="feature-title">Instant Delivery After Zoom Calls</h3>
             <p class="feature-description">
-                We process your audio and video files automatically—transcribing conversations 
-                with Deepgram's Nova-2 technology, identifying speakers, and generating concise 
-                summaries with action points using Claude Sonnet AI.
+                Connect your Zoom account once. Every time a call ends, get transcripts, action points, 
+                and summaries delivered automatically to Telegram—no waiting, no manual work.
             </p>
         </div>
 
         <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-link"></i></div>
-            <h3 class="feature-title">Seamless Zoom Integration</h3>
+            <div class="feature-icon"><i class="fas fa-tasks"></i></div>
+            <h3 class="feature-title">Action Points & Summaries</h3>
             <p class="feature-description">
-                Connect your Zoom account once and receive transcripts automatically in Telegram 
-                when your cloud recordings complete. No manual uploads, no extra steps—just 
-                instant delivery of audio, transcripts, and summaries.
+                Get concise summaries with clear action items extracted automatically from your meetings. 
+                Know exactly what was decided and what needs to be done next.
+            </p>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-project-diagram"></i></div>
+            <h3 class="feature-title">Visual Diagram Generation</h3>
+            <p class="feature-description">
+                Transform conversations into visual diagrams—flowcharts, sequence diagrams, 
+                and relationship maps. Just reply to any transcript with /diagram.
+            </p>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-question-circle"></i></div>
+            <h3 class="feature-title">Ask Questions About Meetings</h3>
+            <p class="feature-description">
+                Get instant answers by asking questions about your transcripts. Ask "What were the action items?" 
+                or "Who made the decision?" and get contextual answers powered by AI.
+            </p>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-microphone"></i></div>
+            <h3 class="feature-title">Intelligent Transcription</h3>
+            <p class="feature-description">
+                High-accuracy transcription with automatic speaker identification. Our AI detects actual names 
+                from conversations, not just generic labels like "Speaker 1" or "Speaker 2".
             </p>
         </div>
 
         <div class="feature-card">
             <div class="feature-icon"><i class="fas fa-search"></i></div>
-            <h3 class="feature-title">Smart Search & Q&A</h3>
+            <h3 class="feature-title">Smart Search Across All Meetings</h3>
             <p class="feature-description">
-                Ask questions about your meetings using semantic search powered by ChromaDB. 
-                Search across all your transcripts, get contextual answers, and find information 
-                even when exact words don't match.
+                Search across all your transcripts using semantic search. Find information even when 
+                exact words don't match—perfect for finding related discussions across multiple meetings.
             </p>
         </div>
     </section>
@@ -83,7 +107,7 @@
     <!-- Main Content Section -->
     <section class="content-section">
         <div class="content-grid">
-            <!-- Left Column - Visual -->
+            <!-- Left Column - Visual (spans all rows) -->
             <div class="content-visual">
                 <div class="visual-box">
                     <svg class="diagram-illustration" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
@@ -125,43 +149,50 @@
                 </div>
             </div>
 
-            <!-- Right Column - Details -->
-            <div class="content-details">
-                <div class="detail-section">
-                    <div class="detail-number">01</div>
-                    <div class="detail-content">
-                        <h3>Intelligent Speaker Recognition</h3>
-                        <p>Advanced AI automatically identifies and labels different speakers in your meetings, 
-                        detecting actual names from conversations rather than generic labels.</p>
-                    </div>
+            <!-- Row 1 -->
+            <div class="detail-row">
+                <div class="detail-number">01</div>
+                <div class="detail-content">
+                    <h3>Instant Delivery After Zoom Calls</h3>
+                    <p>Connect once, get everything automatically. Every Zoom call ends with transcripts, 
+                    action points, and summaries delivered to Telegram instantly.</p>
                 </div>
+            </div>
 
-                <div class="detail-section">
-                    <div class="detail-number">02</div>
-                    <div class="detail-content">
-                        <h3>Visual Diagram Generation</h3>
-                        <p>Transform conversations into visual diagrams—flowcharts, sequence diagrams, 
-                        and relationship maps that make complex discussions easy to understand.</p>
-                    </div>
+            <!-- Row 2 -->
+            <div class="detail-row">
+                <div class="detail-number">02</div>
+                <div class="detail-content">
+                    <h3>Action Points & Summaries</h3>
+                    <p>Get clear action items extracted automatically. Know what was decided and what needs 
+                    to be done next, without reading through entire transcripts.</p>
                 </div>
+            </div>
 
-                <div class="detail-section">
-                    <div class="detail-number">03</div>
-                    <div class="detail-content">
-                        <h3>Support for Large Files</h3>
-                        <p>Process video and audio files up to 2GB in size with real-time progress tracking. 
-                        Supports all major formats including MP4, AVI, MOV, MP3, WAV, and more.</p>
-                    </div>
+            <!-- Row 3 -->
+            <div class="detail-row">
+                <div class="detail-number">03</div>
+                <div class="detail-content">
+                    <h3>Visual Diagrams & Question Answering</h3>
+                    <p>Create diagrams from conversations with /diagram. Ask questions about your meetings 
+                    and get instant answers powered by AI.</p>
                 </div>
+            </div>
 
-                <div class="workflow-box">
-                    <p class="workflow-tagline">Secure. Fast. Intelligent.</p>
-                    <h2 class="workflow-title">ALL PROCESSING IS PERFORMED WITH ENTERPRISE-GRADE AI AND SECURITY STANDARDS</h2>
-                    <div class="workflow-footer">
-                        <span class="company-name">Transcription Bot</span>
-                        <span class="year">2025</span>
-                    </div>
+            <!-- Tagline Row -->
+            <div class="detail-row detail-tagline">
+                <div class="tagline-text">
+                    <span class="tagline-item">Enterprise-Grade</span>
+                    <span class="tagline-separator">•</span>
+                    <span class="tagline-item">AI-Powered</span>
+                    <span class="tagline-separator">•</span>
+                    <span class="tagline-item">Fully Secure</span>
                 </div>
+            </div>
+
+            <!-- Statement Row -->
+            <div class="detail-row detail-statement">
+                <h2 class="statement-title">Enterprise-grade AI transcription with enterprise-level security</h2>
             </div>
         </div>
     </section>
@@ -190,10 +221,11 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <p>&copy; 2025 Transcription Bot. All rights reserved.</p>
+            <p>&copy; 2025 Transcribiscie app. All rights reserved.</p>
         </div>
     </footer>
     </div>
 </body>
 </html>
+
 

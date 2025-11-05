@@ -215,22 +215,25 @@ body {
 /* Content Section */
 .content-section {
     background-color: var(--color-primary);
-    padding: 0;
+    padding: var(--spacing-xl);
 }
 
 .content-grid {
     display: grid;
     grid-template-columns: 45% 55%;
     gap: 0;
-    align-items: stretch;
+    background-color: var(--color-primary);
+    border: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .content-visual {
+    grid-row: 1 / 7;
     background-color: rgba(0, 0, 0, 0.08);
     padding: var(--spacing-2xl);
     display: flex;
     align-items: center;
     justify-content: center;
+    border-right: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .visual-box {
@@ -242,27 +245,16 @@ body {
 
 .diagram-illustration {
     width: 100%;
-    max-width: 350px;
+    max-width: 400px;
     height: auto;
 }
 
-.content-details {
-    padding: var(--spacing-2xl);
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-.detail-section {
+.detail-row {
     display: grid;
     grid-template-columns: 40px 1fr;
     gap: var(--spacing-md);
-    padding: var(--spacing-md) 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.detail-section:last-of-type {
-    border-bottom: 2px solid rgba(0, 0, 0, 0.15);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .detail-number {
@@ -290,46 +282,51 @@ body {
     display: none;
 }
 
-.workflow-box {
-    background-color: var(--color-dark);
-    color: var(--color-light);
-    padding: var(--spacing-lg);
-    margin-top: var(--spacing-lg);
-}
-
-.workflow-tagline {
-    font-size: 12px;
-    font-style: italic;
-    margin-bottom: var(--spacing-sm);
-    opacity: 0.7;
-}
-
-.workflow-title {
-    font-size: clamp(18px, 2.5vw, 24px);
-    font-weight: 700;
-    line-height: 1.3;
-    margin-bottom: var(--spacing-lg);
-    letter-spacing: -0.3px;
-}
-
-.workflow-footer {
+.detail-row.detail-tagline {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    padding-top: var(--spacing-md);
-    border-top: 1px solid rgba(232, 222, 208, 0.2);
+    grid-template-columns: 1fr;
 }
 
-.company-name {
-    font-size: 12px;
+.tagline-text {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+.tagline-item {
+    color: var(--color-dark);
+}
+
+.tagline-separator {
+    color: rgba(45, 45, 45, 0.4);
+    font-weight: 300;
+}
+
+.detail-row.detail-statement {
+    border-bottom: none;
+    padding: var(--spacing-lg) var(--spacing-lg);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    grid-template-columns: 1fr;
+}
+
+.statement-title {
+    font-size: clamp(16px, 2vw, 18px);
     font-weight: 600;
-    letter-spacing: 0.5px;
+    line-height: 1.5;
+    letter-spacing: 0.1px;
+    text-align: center;
+    color: var(--color-dark);
+    max-width: 600px;
 }
 
-.year {
-    font-size: 12px;
-    font-weight: 500;
-}
 
 /* Footer */
 .footer {
@@ -532,17 +529,17 @@ body {
         gap: var(--spacing-sm);
     }
 
-    .detail-section {
+    .content-visual {
+        grid-row: auto;
+        border-right: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+    }
+
+    .detail-row {
         grid-template-columns: 1fr;
     }
 
-    .workflow-footer {
-        flex-direction: column;
-        gap: var(--spacing-xs);
-        align-items: flex-start;
-    }
-
-    .hero, .features-grid, .content-details {
+    .hero, .features-grid {
         padding: var(--spacing-lg);
     }
 

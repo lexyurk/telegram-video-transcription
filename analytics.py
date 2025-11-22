@@ -3,8 +3,6 @@
 Provides a tiny wrapper that is safe to import in any part of the app.
 If POSTHOG_API_KEY is missing, all calls are no-ops.
 """
-from __future__ import annotations
-
 import atexit
 import os
 from typing import Any, Dict, Optional

@@ -170,6 +170,7 @@ The bot includes an intelligent speaker identification system:
 
    # RAG (Retrieval Augmented Generation) for meeting search
    RAG_ENABLE_DEFAULT=false
+   RAG_EMBEDDING_MODEL=text-embedding-004
    RAG_CHUNK_SIZE=400
    RAG_RETRIEVAL_K=12
 
@@ -190,6 +191,8 @@ The bot includes an intelligent speaker identification system:
 2. **Run with Docker Compose** (includes bot, backend, reverse proxy, and cert renew):
    ```bash
    docker-compose up --build -d
+
+> **Note:** Meeting memory (RAG) now uses Gemini embeddings (`text-embedding-004`), so `GOOGLE_API_KEY` must be set even if Claude handles generation.
    ```
 
 3. **Configure Nginx for your domain**:
@@ -236,6 +239,7 @@ The bot includes an intelligent speaker identification system:
 | `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-5-20250929 |
 | `GEMINI_MODEL` | Gemini model to use | gemini-3-pro |
 | `RAG_ENABLE_DEFAULT` | Enable automatic RAG indexing for all transcripts | false |
+| `RAG_EMBEDDING_MODEL` | Gemini embedding model for RAG | text-embedding-004 |
 | `RAG_CHUNK_SIZE` | Size of text chunks for RAG indexing | 400 |
 | `RAG_CHUNK_OVERLAP` | Overlap between chunks | 80 |
 | `RAG_RETRIEVAL_K` | Number of results to retrieve | 12 |

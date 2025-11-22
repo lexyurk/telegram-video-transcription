@@ -31,7 +31,6 @@ dependencies = [
     "PyJWT>=2.8.0",
     "posthog>=3.5.0",
     "chromadb>=0.4.0",
-    "sentence-transformers>=2.2.0",
     "numpy>=1.20.0,<2.0",
 ]
 

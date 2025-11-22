@@ -5,14 +5,15 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from chromadb import PersistentClient
-from chromadb.utils import embedding_functions
+from chromadb.api import ClientAPI
 from loguru import logger
 
 from telegram_bot.config import get_settings
 from telegram_bot.services.ai_model import AIModel, create_ai_model
+from telegram_bot.services.gemini_embedding import GeminiEmbeddingFunction
 from telegram_bot.services.rag_storage_service import RAGStorageService
 
 
@@ -68,20 +69,22 @@ class RAGIndexingService:
 
     def __init__(
         self,
-        embedding_model: Optional[str] = None,
-        client: Optional[PersistentClient] = None,
-        ai_model: Optional[AIModel] = None,
-        storage: Optional[RAGStorageService] = None,
+        embedding_model: str | None = None,
+        client: ClientAPI | None = None,
+        ai_model: AIModel | None = None,
+        storage: RAGStorageService | None = None,
+        embedding_fn: GeminiEmbeddingFunction | None = None,
     ) -> None:
         settings = get_settings()
         self.base_path = settings.temp_dir
         self.embedding_model_name = embedding_model or settings.rag_embedding_model
         self.chunk_size = settings.rag_chunk_size
         self.chunk_overlap = settings.rag_chunk_overlap
-        self.client = client or PersistentClient(path=f"{self.base_path}/chroma")
+        self.client: ClientAPI = client or PersistentClient(path=f"{self.base_path}/chroma")
         self.ai_model = ai_model or create_ai_model()
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=self.embedding_model_name
+        self.embedding_fn = embedding_fn or GeminiEmbeddingFunction(
+            api_key=settings.google_api_key,
+            model_name=self.embedding_model_name,
         )
         self.storage = storage or RAGStorageService()
         logger.info(
@@ -404,6 +407,7 @@ class RAGIndexingService:
         self.ensure_namespace(user_id)
         collection = self.client.get_collection(
             name=self._collection_name(user_id),
+            embedding_function=self.embedding_fn,
         )
 
         ids = [chunk.chunk_id for chunk in chunks]

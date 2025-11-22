@@ -1,14 +1,15 @@
 """Service orchestrating retrieval and answer generation for RAG queries."""
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from chromadb import PersistentClient
-from chromadb.utils import embedding_functions
+from chromadb.api import ClientAPI
 from loguru import logger
 
 from telegram_bot.config import get_settings
 from telegram_bot.services.ai_model import AIModel, create_ai_model
+from telegram_bot.services.gemini_embedding import GeminiEmbeddingFunction
 from telegram_bot.services.rag_intent_parser import ParsedIntent
 
 
@@ -17,17 +18,19 @@ class RAGQueryService:
 
     def __init__(
         self,
-        embedding_model: Optional[str] = None,
-        client: Optional[PersistentClient] = None,
-        ai_model: Optional[AIModel] = None,
+        embedding_model: str | None = None,
+        client: ClientAPI | None = None,
+        ai_model: AIModel | None = None,
+        embedding_fn: GeminiEmbeddingFunction | None = None,
     ) -> None:
         settings = get_settings()
         self.base_path = settings.temp_dir
         self.embedding_model_name = embedding_model or settings.rag_embedding_model
-        self.client = client or PersistentClient(path=f"{self.base_path}/chroma")
+        self.client: ClientAPI = client or PersistentClient(path=f"{self.base_path}/chroma")
         self.ai_model = ai_model or create_ai_model()
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=self.embedding_model_name
+        self.embedding_fn = embedding_fn or GeminiEmbeddingFunction(
+            api_key=settings.google_api_key,
+            model_name=self.embedding_model_name,
         )
         self.retrieval_k = settings.rag_retrieval_k
         self.similarity_threshold = settings.rag_similarity_threshold

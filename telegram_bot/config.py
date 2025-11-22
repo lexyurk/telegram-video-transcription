@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     rag_db_path: str = Field(default="./temp/rag_indexing.sqlite3", alias="RAG_DB_PATH")
     rag_enable_default: bool = Field(default=False, alias="RAG_ENABLE_DEFAULT")
     rag_embedding_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
+        default="text-embedding-004",
         alias="RAG_EMBEDDING_MODEL",
     )
     rag_chunk_size: int = Field(default=400, alias="RAG_CHUNK_SIZE")

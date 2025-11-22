@@ -33,6 +33,7 @@ def test_settings_default_values():
         # AI model defaults
         assert settings.gemini_model == "gemini-3-pro"
         assert settings.claude_model == "claude-sonnet-4-5-20250929"
+        assert settings.rag_embedding_model == "text-embedding-004"
         # API keys
         assert settings.google_api_key == "test_google"
         assert settings.anthropic_api_key == ""  # Default empty
@@ -61,6 +62,7 @@ def test_settings_custom_values():
             "DEEPGRAM_MODEL": "whisper",
             "GEMINI_MODEL": "gemini-1.5-pro",
             "CLAUDE_MODEL": "claude-3.5-sonnet",
+            "RAG_EMBEDDING_MODEL": "custom-embedding-model",
         },
     ):
         settings = Settings()
@@ -73,6 +75,7 @@ def test_settings_custom_values():
         assert settings.deepgram_model == "whisper"
         assert settings.gemini_model == "gemini-1.5-pro"
         assert settings.claude_model == "claude-3.5-sonnet"
+        assert settings.rag_embedding_model == "custom-embedding-model"
 
 
 def test_ai_model_creation_gemini_priority():

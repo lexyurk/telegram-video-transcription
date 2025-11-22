@@ -31,8 +31,8 @@ def test_settings_default_values():
         assert settings.enable_punctuation is True
         assert settings.enable_smart_format is True
         # AI model defaults
-        assert settings.gemini_model == "gemini-2.5-flash"
-        assert settings.claude_model == "claude-sonnet-4-20250514"
+        assert settings.gemini_model == "gemini-3-pro"
+        assert settings.claude_model == "claude-sonnet-4-5-20250929"
         # API keys
         assert settings.google_api_key == "test_google"
         assert settings.anthropic_api_key == ""  # Default empty

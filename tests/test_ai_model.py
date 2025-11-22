@@ -12,9 +12,9 @@ class TestGeminiModel:
     def test_init(self):
         """Test GeminiModel initialization."""
         with patch("telegram_bot.services.ai_model.genai.Client") as mock_client:
-            model = GeminiModel(api_key="test_key", model_name="gemini-2.5-flash")
+            model = GeminiModel(api_key="test_key", model_name="gemini-3-pro")
             
-            assert model.model_name == "gemini-2.5-flash"
+            assert model.model_name == "gemini-3-pro"
             mock_client.assert_called_once_with(api_key="test_key")
 
     @pytest.mark.asyncio
@@ -34,7 +34,7 @@ class TestGeminiModel:
             
             assert result == "Generated text"
             mock_client.models.generate_content.assert_called_once_with(
-                model="gemini-2.5-flash",
+                model="gemini-3-pro",
                 contents=["Test prompt"]
             )
 
@@ -60,9 +60,9 @@ class TestClaudeModel:
     def test_init(self):
         """Test ClaudeModel initialization."""
         with patch("telegram_bot.services.ai_model.AsyncAnthropic") as mock_client:
-            model = ClaudeModel(api_key="test_key", model_name="claude-sonnet-4-20250514")
+            model = ClaudeModel(api_key="test_key", model_name="claude-sonnet-4-5-20250929")
             
-            assert model.model_name == "claude-sonnet-4-20250514"
+            assert model.model_name == "claude-sonnet-4-5-20250929"
             mock_client.assert_called_once_with(api_key="test_key")
 
     @pytest.mark.asyncio
@@ -83,8 +83,8 @@ class TestClaudeModel:
             
             assert result == "Generated text"
             mock_client.messages.create.assert_called_once_with(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=8000,
                 temperature=0.1,
                 messages=[{"role": "user", "content": "Test prompt"}]
             )
@@ -113,14 +113,14 @@ class TestCreateAIModel:
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = "anthropic_key"
-            mock_settings.return_value.gemini_model = "gemini-2.5-flash"
+            mock_settings.return_value.gemini_model = "gemini-3-pro"
             
             with patch("telegram_bot.services.ai_model.GeminiModel") as mock_gemini:
                 result = create_ai_model()
                 
                 mock_gemini.assert_called_once_with(
                     api_key="google_key",
-                    model_name="gemini-2.5-flash"
+                    model_name="gemini-3-pro"
                 )
 
     def test_create_gemini_with_only_google_key(self):
@@ -128,14 +128,14 @@ class TestCreateAIModel:
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = ""
-            mock_settings.return_value.gemini_model = "gemini-2.5-flash"
+            mock_settings.return_value.gemini_model = "gemini-3-pro"
             
             with patch("telegram_bot.services.ai_model.GeminiModel") as mock_gemini:
                 result = create_ai_model()
                 
                 mock_gemini.assert_called_once_with(
                     api_key="google_key",
-                    model_name="gemini-2.5-flash"
+                    model_name="gemini-3-pro"
                 )
 
     def test_create_claude_with_only_anthropic_key(self):

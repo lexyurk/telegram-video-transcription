@@ -166,7 +166,7 @@ The bot includes an intelligent speaker identification system:
    LOG_LEVEL=INFO
    DEEPGRAM_MODEL=nova-2
    CLAUDE_MODEL=claude-sonnet-4-5-20250929
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL=gemini-3-pro
 
    # RAG (Retrieval Augmented Generation) for meeting search
    RAG_ENABLE_DEFAULT=false
@@ -234,7 +234,7 @@ The bot includes an intelligent speaker identification system:
 | `ENABLE_PARAGRAPHS` | Enable paragraph formatting | true |
 | `ENABLE_SMART_FORMAT` | Enable smart formatting | true |
 | `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-5-20250929 |
-| `GEMINI_MODEL` | Gemini model to use | gemini-2.5-flash |
+| `GEMINI_MODEL` | Gemini model to use | gemini-3-pro |
 | `RAG_ENABLE_DEFAULT` | Enable automatic RAG indexing for all transcripts | false |
 | `RAG_CHUNK_SIZE` | Size of text chunks for RAG indexing | 400 |
 | `RAG_CHUNK_OVERLAP` | Overlap between chunks | 80 |

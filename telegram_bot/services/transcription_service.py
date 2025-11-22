@@ -2,7 +2,7 @@
 
 import asyncio
 import aiofiles
-from deepgram import DeepgramClient, PrerecordedOptions
+from deepgram import DeepgramClient
 import httpx
 from loguru import logger
 
@@ -36,17 +36,7 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            
-            options = PrerecordedOptions(
-                model=settings.deepgram_model,
-                detect_language=True,
-                smart_format=settings.enable_smart_format,
-                punctuate=settings.enable_punctuation,
-                paragraphs=settings.enable_paragraphs,
-                diarize=settings.enable_diarization,
-                filler_words=settings.enable_filler_words,
-                profanity_filter=settings.enable_profanity_filter,
-            )
+            options = self._build_prerecorded_options(settings)
 
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
@@ -365,16 +355,7 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            options = PrerecordedOptions(
-                model=settings.deepgram_model,
-                detect_language=True,
-                smart_format=settings.enable_smart_format,
-                punctuate=settings.enable_punctuation,
-                paragraphs=settings.enable_paragraphs,
-                diarize=settings.enable_diarization,
-                filler_words=settings.enable_filler_words,
-                profanity_filter=settings.enable_profanity_filter,
-            )
+            options = self._build_prerecorded_options(settings)
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
             payload = {"buffer": buffer_data}
@@ -403,3 +384,16 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"Error in transcribe_with_segments: {e}", exc_info=True)
             return None, []
+
+    def _build_prerecorded_options(self, settings) -> dict:
+        """Construct a Deepgram prerecorded options payload compatible across SDK versions."""
+        return {
+            "model": settings.deepgram_model,
+            "detect_language": True,
+            "smart_format": settings.enable_smart_format,
+            "punctuate": settings.enable_punctuation,
+            "paragraphs": settings.enable_paragraphs,
+            "diarize": settings.enable_diarization,
+            "filler_words": settings.enable_filler_words,
+            "profanity_filter": settings.enable_profanity_filter,
+        }

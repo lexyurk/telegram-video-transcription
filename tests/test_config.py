@@ -31,7 +31,7 @@ def test_settings_default_values():
         assert settings.enable_punctuation is True
         assert settings.enable_smart_format is True
         # AI model defaults
-        assert settings.gemini_model == "gemini-3-pro"
+        assert settings.gemini_model == "gemini-3-pro-preview"
         assert settings.claude_model == "claude-sonnet-4-5-20250929"
         assert settings.rag_embedding_model == "text-embedding-004"
         # API keys

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     enable_redaction: bool = Field(default=False, alias="ENABLE_REDACTION")
     enable_filler_words: bool = Field(default=True, alias="ENABLE_FILLER_WORDS")
 
-    gemini_model: str = Field(default="gemini-3-pro", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
     claude_model: str = Field(default="claude-sonnet-4-5-20250929", alias="CLAUDE_MODEL")
 
     enable_streaming: bool = Field(default=True, alias="ENABLE_STREAMING")

@@ -22,7 +22,7 @@ class AIModel(ABC):
 class GeminiModel(AIModel):
     """Google Gemini AI model implementation."""
 
-    def __init__(self, api_key: str, model_name: str = "gemini-3-pro") -> None:
+    def __init__(self, api_key: str, model_name: str = "gemini-3-pro-preview") -> None:
         """Initialize Gemini model."""
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name

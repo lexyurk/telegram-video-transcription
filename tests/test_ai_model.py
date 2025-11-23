@@ -12,9 +12,9 @@ class TestGeminiModel:
     def test_init(self):
         """Test GeminiModel initialization."""
         with patch("telegram_bot.services.ai_model.genai.Client") as mock_client:
-            model = GeminiModel(api_key="test_key", model_name="gemini-3-pro")
+            model = GeminiModel(api_key="test_key", model_name="gemini-3-pro-preview")
             
-            assert model.model_name == "gemini-3-pro"
+            assert model.model_name == "gemini-3-pro-preview"
             mock_client.assert_called_once_with(api_key="test_key")
 
     @pytest.mark.asyncio
@@ -34,7 +34,7 @@ class TestGeminiModel:
             
             assert result == "Generated text"
             mock_client.models.generate_content.assert_called_once_with(
-                model="gemini-3-pro",
+                model="gemini-3-pro-preview",
                 contents=["Test prompt"]
             )
 
@@ -113,14 +113,14 @@ class TestCreateAIModel:
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = "anthropic_key"
-            mock_settings.return_value.gemini_model = "gemini-3-pro"
+            mock_settings.return_value.gemini_model = "gemini-3-pro-preview"
             
             with patch("telegram_bot.services.ai_model.GeminiModel") as mock_gemini:
                 result = create_ai_model()
                 
                 mock_gemini.assert_called_once_with(
                     api_key="google_key",
-                    model_name="gemini-3-pro"
+                    model_name="gemini-3-pro-preview"
                 )
 
     def test_create_gemini_with_only_google_key(self):
@@ -128,14 +128,14 @@ class TestCreateAIModel:
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = ""
-            mock_settings.return_value.gemini_model = "gemini-3-pro"
+            mock_settings.return_value.gemini_model = "gemini-3-pro-preview"
             
             with patch("telegram_bot.services.ai_model.GeminiModel") as mock_gemini:
                 result = create_ai_model()
                 
                 mock_gemini.assert_called_once_with(
                     api_key="google_key",
-                    model_name="gemini-3-pro"
+                    model_name="gemini-3-pro-preview"
                 )
 
     def test_create_claude_with_only_anthropic_key(self):

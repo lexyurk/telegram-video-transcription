@@ -2,7 +2,7 @@
 
 import asyncio
 import aiofiles
-from deepgram import DeepgramClient
+from deepgram import DeepgramClient, DeepgramClientOptions
 import httpx
 from loguru import logger
 
@@ -18,7 +18,8 @@ class TranscriptionService:
         
         # Initialize Deepgram client with default configuration
         # We'll pass timeout directly to transcribe_file method
-        self.client = DeepgramClient(settings.deepgram_api_key)
+        client_options = DeepgramClientOptions(api_key=settings.deepgram_api_key)
+        self.client = DeepgramClient(client_options)
         self.timeout_seconds = settings.deepgram_timeout_seconds
         
         logger.info(f"Initialized Deepgram client with {self.timeout_seconds}s timeout")

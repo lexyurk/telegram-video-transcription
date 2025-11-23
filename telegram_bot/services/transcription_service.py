@@ -2,7 +2,8 @@
 
 import asyncio
 import aiofiles
-from deepgram import DeepgramClient, DeepgramClientOptions
+from deepgram import DeepgramClient
+from deepgram.client import DeepgramClientOptions
 import httpx
 from loguru import logger
 

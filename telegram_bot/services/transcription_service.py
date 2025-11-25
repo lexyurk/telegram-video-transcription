@@ -3,7 +3,6 @@
 import asyncio
 import aiofiles
 from deepgram import DeepgramClient
-import httpx
 from loguru import logger
 
 from telegram_bot.config import get_settings
@@ -16,8 +15,7 @@ class TranscriptionService:
         """Initialize the transcription service."""
         settings = get_settings()
         
-        # Initialize Deepgram client with default configuration
-        # We'll pass timeout directly to transcribe_file method
+        # Initialize Deepgram client
         self.client = DeepgramClient(api_key=settings.deepgram_api_key)
         self.timeout_seconds = settings.deepgram_timeout_seconds
         
@@ -36,12 +34,9 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            options = self._build_prerecorded_options(settings)
 
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
-
-            payload = {"buffer": buffer_data}
             
             file_size_mb = len(buffer_data) / (1024 * 1024)
             dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
@@ -49,29 +44,27 @@ class TranscriptionService:
 
             logger.info(f"Starting enhanced transcription for file: {file_path} ({len(buffer_data)} bytes)")
             logger.info(f"Features enabled: diarization={settings.enable_diarization}, punctuation={settings.enable_punctuation}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
-            logger.info(f"File size: {file_size_mb:.1f}MB, Dynamic timeout: {actual_timeout}s (calculated: {dynamic_timeout}s, max: {self.timeout_seconds}s)")
+            logger.info(f"File size: {file_size_mb:.1f}MB, Timeout: {actual_timeout}s")
 
             try:
-                timeout_config = httpx.Timeout(
-                    connect=60.0,
-                    read=actual_timeout,
-                    write=600.0,
-                    pool=10.0
-                )
-                
-                logger.info(f"Using timeout: connect=60s, read={actual_timeout}s, write=600s, pool=10s")
-                
+                # Deepgram SDK v5.3.0 API: pass request as bytes, options as kwargs
                 response = await asyncio.to_thread(
                     self.client.listen.v1.media.transcribe_file,
-                    payload,
-                    options,
-                    timeout=timeout_config
+                    request=buffer_data,
+                    model=settings.deepgram_model,
+                    detect_language=True,
+                    smart_format=settings.enable_smart_format,
+                    punctuate=settings.enable_punctuation,
+                    paragraphs=settings.enable_paragraphs,
+                    diarize=settings.enable_diarization,
+                    filler_words=settings.enable_filler_words,
+                    profanity_filter=settings.enable_profanity_filter,
+                    request_options={"timeout_in_seconds": actual_timeout},
                 )
             except Exception as e:
                 error_msg = str(e).lower()
-                if "write operation timed out" in error_msg or "timeout" in error_msg:
-                    logger.error(f"HTTP timeout during file upload: {e}")
-                    logger.error("This suggests network issues or the file upload took too long")
+                if "timeout" in error_msg:
+                    logger.error(f"HTTP timeout during transcription: {e}")
                     logger.error("Consider checking network connectivity or file size")
                 else:
                     logger.error(f"Deepgram API call failed: {e}")
@@ -79,8 +72,11 @@ class TranscriptionService:
 
             logger.info("Received response from Deepgram, processing...")
             
+            # Convert response to dict for processing
             if hasattr(response, 'to_dict'):
                 response = response.to_dict()
+            elif hasattr(response, 'model_dump'):
+                response = response.model_dump()
             elif hasattr(response, '__dict__'):
                 response = response.__dict__
 
@@ -355,22 +351,31 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            options = self._build_prerecorded_options(settings)
             async with aiofiles.open(file_path, "rb") as audio_file:
                 buffer_data = await audio_file.read()
-            payload = {"buffer": buffer_data}
             file_size_mb = len(buffer_data) / (1024 * 1024)
             dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
             actual_timeout = min(dynamic_timeout, self.timeout_seconds)
-            timeout_config = httpx.Timeout(connect=60.0, read=actual_timeout, write=600.0, pool=10.0)
+            
+            # Deepgram SDK v5.3.0 API
             response = await asyncio.to_thread(
                 self.client.listen.v1.media.transcribe_file,
-                payload,
-                options,
-                timeout=timeout_config,
+                request=buffer_data,
+                model=settings.deepgram_model,
+                detect_language=True,
+                smart_format=settings.enable_smart_format,
+                punctuate=settings.enable_punctuation,
+                paragraphs=settings.enable_paragraphs,
+                diarize=settings.enable_diarization,
+                filler_words=settings.enable_filler_words,
+                profanity_filter=settings.enable_profanity_filter,
+                request_options={"timeout_in_seconds": actual_timeout},
             )
+            
             if hasattr(response, 'to_dict'):
                 response = response.to_dict()
+            elif hasattr(response, 'model_dump'):
+                response = response.model_dump()
             elif hasattr(response, '__dict__'):
                 response = response.__dict__
             if "results" not in response or not response["results"].get("channels"):
@@ -384,16 +389,3 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"Error in transcribe_with_segments: {e}", exc_info=True)
             return None, []
-
-    def _build_prerecorded_options(self, settings) -> dict:
-        """Construct a Deepgram prerecorded options payload compatible across SDK versions."""
-        return {
-            "model": settings.deepgram_model,
-            "detect_language": True,
-            "smart_format": settings.enable_smart_format,
-            "punctuate": settings.enable_punctuation,
-            "paragraphs": settings.enable_paragraphs,
-            "diarize": settings.enable_diarization,
-            "filler_words": settings.enable_filler_words,
-            "profanity_filter": settings.enable_profanity_filter,
-        }

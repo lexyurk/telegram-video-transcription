@@ -62,7 +62,7 @@ class TranscriptionService:
                 logger.info(f"Using timeout: connect=60s, read={actual_timeout}s, write=600s, pool=10s")
                 
                 response = await asyncio.to_thread(
-                    self.client.listen.prerecorded.v("1").transcribe_file,
+                    self.client.listen.rest.v("1").transcribe_file,
                     payload,
                     options,
                     timeout=timeout_config
@@ -364,7 +364,7 @@ class TranscriptionService:
             actual_timeout = min(dynamic_timeout, self.timeout_seconds)
             timeout_config = httpx.Timeout(connect=60.0, read=actual_timeout, write=600.0, pool=10.0)
             response = await asyncio.to_thread(
-                self.client.listen.prerecorded.v("1").transcribe_file,
+                self.client.listen.rest.v("1").transcribe_file,
                 payload,
                 options,
                 timeout=timeout_config,

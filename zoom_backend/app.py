@@ -33,6 +33,7 @@ from zoom_backend.db import (
     upsert_meeting,
     insert_recording_if_new,
     update_tokens_by_zoom_user_id,
+    get_bridge_chat_id,
 )
 
 
@@ -701,8 +702,8 @@ async def process_recording(
                 logger.warning(f"Zoom transcript alignment failed: {e}")
 
             # Try applying Zoom participant names to the transcript before saving
+            zoom_names: list[str] = []
             if not aligned_mapping:
-                zoom_names: list[str] = []
                 try:
                     zoom_names = await fetch_meeting_participants(access_token, meeting_uuid)
                 except Exception as e:
@@ -746,6 +747,17 @@ async def process_recording(
                     analytics.capture(distinct_id, "zoom_summary_succeeded", {"chars": len(summary or "")})
                 except Exception:
                     pass
+
+            # Forward to bridge chat if configured
+            await forward_to_bridge(
+                zoom_user_id=zoom_user_id,
+                topic=data.get("topic", "Unknown"),
+                transcript_with_date=transcript_with_date,
+                summary=summary,
+                recording_date=recording_date_str,
+                meeting_uuid=meeting_uuid,
+                participants=zoom_names,
+            )
         else:
             await send_message(chat_id, "⚠️ Could not create transcript from Zoom recording.")
             try:
@@ -761,6 +773,55 @@ async def process_recording(
             analytics.capture(distinct_id, "zoom_processing_error", {"error": str(e)[:200]})
         except Exception:
             pass
+
+
+async def forward_to_bridge(
+    zoom_user_id: str,
+    topic: str,
+    transcript_with_date: str,
+    summary: Optional[str],
+    recording_date: Optional[str],
+    meeting_uuid: str,
+    participants: List[str],
+) -> None:
+    """Forward transcript + summary to bridge chat if configured for this zoom user."""
+    settings = get_settings()
+
+    with get_conn(settings.zoom_db_path) as conn:
+        bridge_chat_id = get_bridge_chat_id(conn, zoom_user_id)
+
+    if not bridge_chat_id:
+        return
+
+    logger.info("Forwarding to bridge chat {} for zoom_user {}", bridge_chat_id, zoom_user_id)
+
+    try:
+        # 1. Structured header message
+        header = "🎙 *Zoom Meeting Transcript*\n"
+        header += f"*Topic:* {topic}\n"
+        if recording_date:
+            header += f"*Date:* {recording_date}\n"
+        if participants:
+            header += f"*Participants:* {', '.join(participants)}\n"
+        header += f"*Meeting ID:* `{meeting_uuid[:12]}…`"
+
+        await send_message(bridge_chat_id, header)
+
+        # 2. Transcript as .txt file
+        file_service = FileService()
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+        safe_topic = re.sub(r"[^\w\s-]", "", topic).strip().replace(" ", "_")[:30]
+        filename = f"meeting_{timestamp}_{safe_topic}.txt"
+        transcript_path = await file_service.create_text_file(transcript_with_date, filename)
+        await send_telegram_document(bridge_chat_id, transcript_path, f"📄 Transcript: {topic}")
+
+        # 3. Summary as text message
+        if summary:
+            await send_long_message(bridge_chat_id, f"📋 *Summary*\n\n{summary}")
+
+        logger.info("Successfully forwarded to bridge chat {}", bridge_chat_id)
+    except Exception as e:
+        logger.warning("Failed to forward to bridge chat {}: {}", bridge_chat_id, e)
 
 
 async def send_telegram_audio(chat_id: int, path: str, caption: str) -> None:

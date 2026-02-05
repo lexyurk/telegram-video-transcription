@@ -28,6 +28,13 @@ from telegram_bot.services import (
 )
 from telegram_bot.mtproto_downloader import MTProtoDownloader
 from analytics import analytics, tg_distinct_id
+from zoom_backend.db import (
+    get_conn,
+    upsert_user,
+    get_connection_by_user_id,
+    set_bridge_chat_id,
+    get_bridge_chat_id,
+)
 
 
 class TelegramTranscriptionBot:
@@ -192,6 +199,89 @@ Just send me any video or audio file and I'll transcribe it for you!
             analytics.capture(tg_distinct_id(user.id), "command_disconnect_zoom")
         except Exception:
             pass
+
+    async def bridge_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle /bridge command — show status, enable or disable bridge forwarding."""
+        settings = get_settings()
+        user = update.effective_user
+        chat_id = update.effective_chat.id
+        distinct_id = tg_distinct_id(user.id)
+
+        try:
+            self._identify_telegram_user(user)
+        except Exception:
+            pass
+
+        # Look up the user's zoom connection
+        with get_conn(settings.zoom_db_path) as conn:
+            user_id = upsert_user(conn, user.id, chat_id)
+            zc = get_connection_by_user_id(conn, user_id)
+
+        if not zc:
+            await update.message.reply_text(
+                "❌ No Zoom account connected.\n\n"
+                "Use /connect to link your Zoom account first, then you can enable bridge forwarding.",
+            )
+            return
+
+        zoom_user_id = zc["zoom_user_id"]
+        arg = context.args[0].lower() if context.args else None
+
+        if arg == "on":
+            with get_conn(settings.zoom_db_path) as conn:
+                set_bridge_chat_id(conn, zoom_user_id, chat_id)
+            await update.message.reply_text(
+                f"✅ **Bridge enabled**\n\n"
+                f"Zoom transcripts will be forwarded to this chat (`{chat_id}`).\n"
+                f"Use `/bridge off` to disable.",
+                parse_mode="Markdown",
+            )
+            try:
+                analytics.capture(distinct_id, "bridge_enabled", {"bridge_chat_id": chat_id})
+            except Exception:
+                pass
+
+        elif arg == "off":
+            with get_conn(settings.zoom_db_path) as conn:
+                set_bridge_chat_id(conn, zoom_user_id, None)
+            await update.message.reply_text(
+                "❌ **Bridge disabled**\n\n"
+                "Zoom transcripts will no longer be forwarded.\n"
+                "Use `/bridge on` to re-enable.",
+                parse_mode="Markdown",
+            )
+            try:
+                analytics.capture(distinct_id, "bridge_disabled")
+            except Exception:
+                pass
+
+        else:
+            # Show status
+            with get_conn(settings.zoom_db_path) as conn:
+                current_bridge = get_bridge_chat_id(conn, zoom_user_id)
+
+            if current_bridge:
+                status_text = (
+                    f"🔗 **Bridge Status: ON**\n\n"
+                    f"Forwarding to chat: `{current_bridge}`\n"
+                    f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
+                    f"Commands:\n"
+                    f"• `/bridge off` — disable forwarding\n"
+                    f"• `/bridge on` — re-enable (updates to current chat)"
+                )
+            else:
+                status_text = (
+                    f"🔗 **Bridge Status: OFF**\n\n"
+                    f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
+                    f"Commands:\n"
+                    f"• `/bridge on` — enable forwarding to this chat\n"
+                    f"• `/bridge off` — disable forwarding"
+                )
+            await update.message.reply_text(status_text, parse_mode="Markdown")
+            try:
+                analytics.capture(distinct_id, "bridge_status_checked", {"bridge_active": bool(current_bridge)})
+            except Exception:
+                pass
 
     async def memory_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Toggle RAG indexing (semantic memory) for this user."""
@@ -1284,6 +1374,7 @@ Just send me a file and I'll handle everything automatically!
         application.add_handler(CommandHandler("connect", self.connect_command))
         application.add_handler(CommandHandler("status", self.status_command))
         application.add_handler(CommandHandler("disconnect", self.disconnect_command))
+        application.add_handler(CommandHandler("bridge", self.bridge_command))
 
         # File handlers (documents, audio, video, voice, video notes)
         application.add_handler(MessageHandler(filters.Document.ALL, self.handle_file))

@@ -14,6 +14,7 @@ from zoom_backend.db import (
     save_connection,
     set_bridge_chat_id,
     get_bridge_chat_id,
+    get_connection_by_telegram_user_id,
     get_connection_by_user_id,
 )
 
@@ -133,6 +134,18 @@ class TestBridgeDbHelpers:
         finally:
             os.unlink(path)
 
+    def test_get_connection_by_telegram_user_id_across_chats(self):
+        path = _make_db()
+        try:
+            zoom_user_id = _seed_connection(path, telegram_user_id=111, chat_id=100)
+            with get_conn(path) as conn:
+                upsert_user(conn, 111, 200)
+                row = get_connection_by_telegram_user_id(conn, 111)
+            assert row is not None
+            assert row["zoom_user_id"] == zoom_user_id
+        finally:
+            os.unlink(path)
+
 
 # ---------------------------------------------------------------------------
 # 3. /bridge command tests
@@ -200,6 +213,26 @@ class TestBridgeCommand:
             os.unlink(path)
 
     @pytest.mark.asyncio
+    async def test_bridge_on_uses_connection_from_different_chat(self):
+        path = _make_db()
+        try:
+            _seed_connection(path, telegram_user_id=111, chat_id=100)
+            update = _make_update(user_id=111, chat_id=200)
+            ctx = _make_context(args=["on"])
+            with patch.dict(os.environ, {**ENV_VARS, "ZOOM_DB_PATH": path}):
+                from telegram_bot.bot import TelegramTranscriptionBot
+                bot = TelegramTranscriptionBot()
+                await bot.bridge_command(update, ctx)
+            text = update.message.reply_text.call_args[0][0]
+            assert "No Zoom account connected" not in text
+            assert "Bridge enabled" in text
+
+            with get_conn(path) as conn:
+                assert get_bridge_chat_id(conn, "zoom_abc123") == 200
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
     async def test_bridge_off(self):
         path = _make_db()
         try:
@@ -218,6 +251,38 @@ class TestBridgeCommand:
 
             with get_conn(path) as conn:
                 assert get_bridge_chat_id(conn, zoom_user_id) is None
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("args", "bridge_chat_id"),
+        [
+            (["on"], None),
+            (["off"], 222),
+            ([], 222),
+            ([], None),
+        ],
+    )
+    async def test_bridge_replies_use_legacy_markdown_bold(self, args, bridge_chat_id):
+        path = _make_db()
+        try:
+            zoom_user_id = _seed_connection(path)
+            if bridge_chat_id is not None:
+                with get_conn(path) as conn:
+                    set_bridge_chat_id(conn, zoom_user_id, bridge_chat_id)
+
+            update = _make_update()
+            ctx = _make_context(args=args)
+            with patch.dict(os.environ, {**ENV_VARS, "ZOOM_DB_PATH": path}):
+                from telegram_bot.bot import TelegramTranscriptionBot
+                bot = TelegramTranscriptionBot()
+                await bot.bridge_command(update, ctx)
+
+            text = update.message.reply_text.call_args[0][0]
+            assert "**" not in text
+            assert "*" in text
+            assert update.message.reply_text.call_args.kwargs["parse_mode"] == "Markdown"
         finally:
             os.unlink(path)
 

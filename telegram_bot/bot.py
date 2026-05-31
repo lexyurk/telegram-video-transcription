@@ -31,7 +31,7 @@ from analytics import analytics, tg_distinct_id
 from zoom_backend.db import (
     get_conn,
     upsert_user,
-    get_connection_by_user_id,
+    get_connection_by_telegram_user_id,
     set_bridge_chat_id,
     get_bridge_chat_id,
 )
@@ -214,8 +214,8 @@ Just send me any video or audio file and I'll transcribe it for you!
 
         # Look up the user's zoom connection
         with get_conn(settings.zoom_db_path) as conn:
-            user_id = upsert_user(conn, user.id, chat_id)
-            zc = get_connection_by_user_id(conn, user_id)
+            upsert_user(conn, user.id, chat_id)
+            zc = get_connection_by_telegram_user_id(conn, user.id)
 
         if not zc:
             await update.message.reply_text(
@@ -231,7 +231,7 @@ Just send me any video or audio file and I'll transcribe it for you!
             with get_conn(settings.zoom_db_path) as conn:
                 set_bridge_chat_id(conn, zoom_user_id, chat_id)
             await update.message.reply_text(
-                f"✅ **Bridge enabled**\n\n"
+                f"✅ *Bridge enabled*\n\n"
                 f"Zoom transcripts will be forwarded to this chat (`{chat_id}`).\n"
                 f"Use `/bridge off` to disable.",
                 parse_mode="Markdown",
@@ -245,7 +245,7 @@ Just send me any video or audio file and I'll transcribe it for you!
             with get_conn(settings.zoom_db_path) as conn:
                 set_bridge_chat_id(conn, zoom_user_id, None)
             await update.message.reply_text(
-                "❌ **Bridge disabled**\n\n"
+                "❌ *Bridge disabled*\n\n"
                 "Zoom transcripts will no longer be forwarded.\n"
                 "Use `/bridge on` to re-enable.",
                 parse_mode="Markdown",
@@ -262,7 +262,7 @@ Just send me any video or audio file and I'll transcribe it for you!
 
             if current_bridge:
                 status_text = (
-                    f"🔗 **Bridge Status: ON**\n\n"
+                    f"🔗 *Bridge Status: ON*\n\n"
                     f"Forwarding to chat: `{current_bridge}`\n"
                     f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
                     f"Commands:\n"
@@ -271,7 +271,7 @@ Just send me any video or audio file and I'll transcribe it for you!
                 )
             else:
                 status_text = (
-                    f"🔗 **Bridge Status: OFF**\n\n"
+                    f"🔗 *Bridge Status: OFF*\n\n"
                     f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
                     f"Commands:\n"
                     f"• `/bridge on` — enable forwarding to this chat\n"

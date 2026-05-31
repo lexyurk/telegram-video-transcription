@@ -225,6 +225,23 @@ def get_connection_by_telegram(
     return cur.fetchone()
 
 
+def get_connection_by_telegram_user_id(
+    conn: sqlite3.Connection, telegram_user_id: int
+) -> Optional[sqlite3.Row]:
+    """Get zoom connection by Telegram user across chats."""
+    cur = conn.execute(
+        """
+        SELECT zc.* FROM zoom_connections zc
+        JOIN users u ON u.id = zc.user_id
+        WHERE u.telegram_user_id = ?
+        ORDER BY zc.id DESC
+        LIMIT 1
+        """,
+        (telegram_user_id,),
+    )
+    return cur.fetchone()
+
+
 def update_tokens_by_zoom_user_id(
     conn: sqlite3.Connection, zoom_user_id: str, tokens: Dict[str, Any]
 ) -> None:

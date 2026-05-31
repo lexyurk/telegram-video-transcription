@@ -785,17 +785,17 @@ async def forward_to_bridge(
     participants: List[str],
 ) -> None:
     """Forward transcript + summary to bridge chat if configured for this zoom user."""
-    settings = get_settings()
-
-    with get_conn(settings.zoom_db_path) as conn:
-        bridge_chat_id = get_bridge_chat_id(conn, zoom_user_id)
-
-    if not bridge_chat_id:
-        return
-
-    logger.info("Forwarding to bridge chat {} for zoom_user {}", bridge_chat_id, zoom_user_id)
-
     try:
+        settings = get_settings()
+
+        with get_conn(settings.zoom_db_path) as conn:
+            bridge_chat_id = get_bridge_chat_id(conn, zoom_user_id)
+
+        if not bridge_chat_id:
+            return
+
+        logger.info("Forwarding to bridge chat {} for zoom_user {}", bridge_chat_id, zoom_user_id)
+
         # 1. Structured header message
         header = "🎙 *Zoom Meeting Transcript*\n"
         header += f"*Topic:* {topic}\n"
@@ -821,7 +821,7 @@ async def forward_to_bridge(
 
         logger.info("Successfully forwarded to bridge chat {}", bridge_chat_id)
     except Exception as e:
-        logger.warning("Failed to forward to bridge chat {}: {}", bridge_chat_id, e)
+        logger.warning("Failed to forward to bridge for zoom_user {}: {}", zoom_user_id, e)
 
 
 async def send_telegram_audio(chat_id: int, path: str, caption: str) -> None:

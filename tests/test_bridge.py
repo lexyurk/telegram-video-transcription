@@ -452,3 +452,19 @@ class TestForwardToBridge:
                     )
         finally:
             os.unlink(path)
+
+    @pytest.mark.asyncio
+    async def test_forward_to_bridge_handles_db_error_gracefully(self):
+        """If bridge DB lookup fails, forward_to_bridge should not raise."""
+        with patch("zoom_backend.app.get_settings", side_effect=sqlite3.Error("DB error")):
+            from zoom_backend.app import forward_to_bridge
+
+            await forward_to_bridge(
+                zoom_user_id="zoom_abc123",
+                topic="Broken",
+                transcript_with_date="text",
+                summary="sum",
+                recording_date=None,
+                meeting_uuid="uuid",
+                participants=[],
+            )

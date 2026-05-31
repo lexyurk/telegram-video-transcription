@@ -26,6 +26,8 @@ def test_settings_default_values():
         assert settings.temp_dir == "./temp"
         assert settings.log_level == "INFO"
         assert settings.deepgram_model == "nova-2"
+        assert settings.download_stall_timeout_seconds == 180
+        assert settings.download_watchdog_interval_seconds == 10
         # Language detection is now automatic
         assert settings.enable_diarization is True
         assert settings.enable_punctuation is True

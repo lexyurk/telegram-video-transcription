@@ -702,8 +702,8 @@ async def process_recording(
                 logger.warning(f"Zoom transcript alignment failed: {e}")
 
             # Try applying Zoom participant names to the transcript before saving
-            zoom_names: list[str] = []
-            if not aligned_mapping:
+            zoom_names: list[str] = list(dict.fromkeys(name for name in aligned_mapping.values() if name))
+            if not zoom_names:
                 try:
                     zoom_names = await fetch_meeting_participants(access_token, meeting_uuid)
                 except Exception as e:

@@ -288,15 +288,3 @@ def get_bridge_chat_id(conn: sqlite3.Connection, zoom_user_id: str) -> Optional[
         return int(row[0])
     return None
 
-
-def get_connection_by_user_id(
-    conn: sqlite3.Connection, user_id: int
-) -> Optional[sqlite3.Row]:
-    """Get zoom connection by internal user_id."""
-    cur = conn.execute(
-        "SELECT * FROM zoom_connections WHERE user_id = ?",
-        (user_id,),
-    )
-    return cur.fetchone()
-
-

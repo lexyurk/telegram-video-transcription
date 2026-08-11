@@ -260,11 +260,14 @@ Just send me any video or audio file and I'll transcribe it for you!
             with get_conn(settings.zoom_db_path) as conn:
                 current_bridge = get_bridge_chat_id(conn, zoom_user_id)
 
+            # Legacy Markdown: escape dynamic values so emails like a_b@x.com don't break parsing.
+            account_label = self._escape_legacy_markdown(zc["email"] or zoom_user_id)
+
             if current_bridge:
                 status_text = (
                     f"🔗 *Bridge Status: ON*\n\n"
                     f"Forwarding to chat: `{current_bridge}`\n"
-                    f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
+                    f"Zoom account: {account_label}\n\n"
                     f"Commands:\n"
                     f"• `/bridge off` — disable forwarding\n"
                     f"• `/bridge on` — re-enable (updates to current chat)"
@@ -272,7 +275,7 @@ Just send me any video or audio file and I'll transcribe it for you!
             else:
                 status_text = (
                     f"🔗 *Bridge Status: OFF*\n\n"
-                    f"Zoom account: {zc['email'] or zoom_user_id}\n\n"
+                    f"Zoom account: {account_label}\n\n"
                     f"Commands:\n"
                     f"• `/bridge on` — enable forwarding to this chat\n"
                     f"• `/bridge off` — disable forwarding"
@@ -1321,6 +1324,15 @@ Just send me a file and I'll handle everything automatically!
         special_chars = ['_', '*', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
         for char in special_chars:
             text = text.replace(char, f'\\{char}')
+        return text
+
+    def _escape_legacy_markdown(self, text: str) -> str:
+        """Escape characters that break Telegram legacy Markdown (parse_mode=Markdown)."""
+        if not text:
+            return text
+        # Backslash first so later escapes aren't double-processed incorrectly.
+        for char in ("\\", "_", "*", "`", "["):
+            text = text.replace(char, f"\\{char}")
         return text
 
     def _split_message(self, message: str, max_length: int) -> list[str]:

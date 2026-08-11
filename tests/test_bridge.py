@@ -15,7 +15,6 @@ from zoom_backend.db import (
     set_bridge_chat_id,
     get_bridge_chat_id,
     get_connection_by_telegram_user_id,
-    get_connection_by_user_id,
 )
 
 
@@ -31,7 +30,12 @@ def _make_db() -> str:
     return path
 
 
-def _seed_connection(path: str, telegram_user_id: int = 111, chat_id: int = 222) -> str:
+def _seed_connection(
+    path: str,
+    telegram_user_id: int = 111,
+    chat_id: int = 222,
+    email: str = "user@example.com",
+) -> str:
     """Insert a user + zoom connection and return zoom_user_id."""
     zoom_user_id = "zoom_abc123"
     with get_conn(path) as conn:
@@ -41,7 +45,7 @@ def _seed_connection(path: str, telegram_user_id: int = 111, chat_id: int = 222)
             zoom_user_id,
             user_id,
             {"access_token": "at", "refresh_token": "rt", "expires_in": 3600},
-            email="user@example.com",
+            email=email,
         )
     return zoom_user_id
 
@@ -110,27 +114,6 @@ class TestBridgeDbHelpers:
                 set_bridge_chat_id(conn, zoom_user_id, None)
             with get_conn(path) as conn:
                 assert get_bridge_chat_id(conn, zoom_user_id) is None
-        finally:
-            os.unlink(path)
-
-    def test_get_connection_by_user_id(self):
-        path = _make_db()
-        try:
-            zoom_user_id = _seed_connection(path)
-            with get_conn(path) as conn:
-                user_id = upsert_user(conn, 111, 222)
-                row = get_connection_by_user_id(conn, user_id)
-            assert row is not None
-            assert row["zoom_user_id"] == zoom_user_id
-        finally:
-            os.unlink(path)
-
-    def test_get_connection_by_user_id_not_found(self):
-        path = _make_db()
-        try:
-            with get_conn(path) as conn:
-                row = get_connection_by_user_id(conn, 99999)
-            assert row is None
         finally:
             os.unlink(path)
 
@@ -318,6 +301,30 @@ class TestBridgeCommand:
                 await bot.bridge_command(update, ctx)
             text = update.message.reply_text.call_args[0][0]
             assert "Status: OFF" in text
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("bridge_chat_id", [222, None])
+    async def test_bridge_status_escapes_email_markdown(self, bridge_chat_id):
+        """Emails with underscores must be escaped for legacy Markdown replies."""
+        path = _make_db()
+        try:
+            zoom_user_id = _seed_connection(path, email="john_doe@example.com")
+            if bridge_chat_id is not None:
+                with get_conn(path) as conn:
+                    set_bridge_chat_id(conn, zoom_user_id, bridge_chat_id)
+
+            update = _make_update()
+            ctx = _make_context()
+            with patch.dict(os.environ, {**ENV_VARS, "ZOOM_DB_PATH": path}):
+                from telegram_bot.bot import TelegramTranscriptionBot
+                bot = TelegramTranscriptionBot()
+                await bot.bridge_command(update, ctx)
+
+            text = update.message.reply_text.call_args[0][0]
+            assert "john\\_doe@example.com" in text
+            assert update.message.reply_text.call_args.kwargs["parse_mode"] == "Markdown"
         finally:
             os.unlink(path)
 

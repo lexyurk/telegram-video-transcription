@@ -3,6 +3,7 @@
 import asyncio
 import os
 import tempfile
+import time
 from typing import Optional
 from pathlib import Path
 
@@ -12,6 +13,10 @@ from telethon import TelegramClient
 from telethon.tl.types import Document, DocumentAttributeFilename
 
 from telegram_bot.config import get_settings
+
+
+class DownloadStalledError(TimeoutError):
+    """Raised when a Telegram file download stops making progress."""
 
 
 class MTProtoDownloader:
@@ -49,6 +54,66 @@ class MTProtoDownloader:
         """Check if we can download a large file via MTProto."""
         # Telegram's actual file size limit is 2GB
         return file_size_mb <= 2048
+
+    async def _download_media_with_watchdog(
+        self,
+        message,
+        temp_file_path: str,
+        progress_callback=None,
+    ) -> None:
+        """Download media and cancel it if byte progress stalls."""
+        stall_timeout = max(1, self.settings.download_stall_timeout_seconds)
+        watchdog_interval = max(
+            1,
+            min(self.settings.download_watchdog_interval_seconds, stall_timeout),
+        )
+        last_progress_at = time.monotonic()
+        last_progress_bytes = 0
+
+        async def progress_hook(current: int, total: int):
+            nonlocal last_progress_at, last_progress_bytes
+            if current > last_progress_bytes:
+                last_progress_at = time.monotonic()
+                last_progress_bytes = current
+            if progress_callback:
+                await progress_callback(current, total)
+
+        download_task = asyncio.create_task(
+            self.client.download_media(
+                message,
+                file=temp_file_path,
+                progress_callback=progress_hook,
+            )
+        )
+
+        async def watchdog() -> None:
+            while not download_task.done():
+                await asyncio.sleep(watchdog_interval)
+                idle_seconds = time.monotonic() - last_progress_at
+                if idle_seconds >= stall_timeout:
+                    download_task.cancel()
+                    raise DownloadStalledError(
+                        f"Download stalled for {idle_seconds:.0f}s at "
+                        f"{last_progress_bytes} bytes"
+                    )
+
+        watchdog_task = asyncio.create_task(watchdog())
+
+        done, pending = await asyncio.wait(
+            {download_task, watchdog_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        if watchdog_task in done:
+            # Propagate DownloadStalledError if the watchdog stopped the download.
+            await watchdog_task
+
+        await download_task
 
     async def download_large_file(
         self,
@@ -175,21 +240,20 @@ class MTProtoDownloader:
 
             logger.info(f"Starting MTProto download: {file_name} ({file_size / (1024*1024):.1f}MB)")
 
-            # Progress tracking
-            async def progress_hook(current: int, total: int):
-                if progress_callback:
-                    await progress_callback(current, total)
-
-            # Download the file
-            await self.client.download_media(
+            await self._download_media_with_watchdog(
                 message,
-                file=temp_file_path,
-                progress_callback=progress_hook
+                temp_file_path,
+                progress_callback,
             )
 
             logger.info(f"Successfully downloaded large file: {temp_file_path}")
             return temp_file_path
 
+        except DownloadStalledError as e:
+            logger.error(f"Download stalled via MTProto: {e}")
+            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            return None
         except Exception as e:
             logger.error(f"Error downloading file via MTProto: {e}")
             if 'temp_file_path' in locals() and os.path.exists(temp_file_path):

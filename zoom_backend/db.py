@@ -56,6 +56,18 @@ def ensure_db(path: str) -> None:
             )
             """
         )
+        # Migration: add bridge_chat_id column to zoom_connections if missing
+        _migrate_add_bridge_chat_id(conn)
+
+
+def _migrate_add_bridge_chat_id(conn: sqlite3.Connection) -> None:
+    """Add bridge_chat_id column to zoom_connections if it doesn't exist."""
+    cur = conn.execute("PRAGMA table_info(zoom_connections)")
+    columns = {row[1] for row in cur.fetchall()}
+    if "bridge_chat_id" not in columns:
+        conn.execute(
+            "ALTER TABLE zoom_connections ADD COLUMN bridge_chat_id INTEGER"
+        )
 
 
 @contextmanager
@@ -213,6 +225,23 @@ def get_connection_by_telegram(
     return cur.fetchone()
 
 
+def get_connection_by_telegram_user_id(
+    conn: sqlite3.Connection, telegram_user_id: int
+) -> Optional[sqlite3.Row]:
+    """Get zoom connection by Telegram user across chats."""
+    cur = conn.execute(
+        """
+        SELECT zc.* FROM zoom_connections zc
+        JOIN users u ON u.id = zc.user_id
+        WHERE u.telegram_user_id = ?
+        ORDER BY zc.id DESC
+        LIMIT 1
+        """,
+        (telegram_user_id,),
+    )
+    return cur.fetchone()
+
+
 def update_tokens_by_zoom_user_id(
     conn: sqlite3.Connection, zoom_user_id: str, tokens: Dict[str, Any]
 ) -> None:
@@ -234,4 +263,28 @@ def update_tokens_by_zoom_user_id(
         ),
     )
 
+
+# --- Bridge functions ---
+
+
+def set_bridge_chat_id(
+    conn: sqlite3.Connection, zoom_user_id: str, bridge_chat_id: Optional[int]
+) -> None:
+    """Set or clear bridge_chat_id for a zoom connection."""
+    conn.execute(
+        "UPDATE zoom_connections SET bridge_chat_id = ? WHERE zoom_user_id = ?",
+        (bridge_chat_id, zoom_user_id),
+    )
+
+
+def get_bridge_chat_id(conn: sqlite3.Connection, zoom_user_id: str) -> Optional[int]:
+    """Get bridge_chat_id for a zoom connection. Returns None if not set."""
+    cur = conn.execute(
+        "SELECT bridge_chat_id FROM zoom_connections WHERE zoom_user_id = ?",
+        (zoom_user_id,),
+    )
+    row = cur.fetchone()
+    if row and row[0] is not None:
+        return int(row[0])
+    return None
 

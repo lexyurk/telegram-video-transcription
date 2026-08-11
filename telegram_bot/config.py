@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     deepgram_timeout_seconds: int = Field(
         default=3600, alias="DEEPGRAM_TIMEOUT_SECONDS"
     )
+    download_stall_timeout_seconds: int = Field(
+        default=180, alias="DOWNLOAD_STALL_TIMEOUT_SECONDS"
+    )
+    download_watchdog_interval_seconds: int = Field(
+        default=10, alias="DOWNLOAD_WATCHDOG_INTERVAL_SECONDS"
+    )
     
     enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")
     enable_punctuation: bool = Field(default=True, alias="ENABLE_PUNCTUATION")

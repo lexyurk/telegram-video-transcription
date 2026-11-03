@@ -8,6 +8,12 @@ import pytest
 from telegram_bot.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def isolate_dotenv(monkeypatch):
+    """Never let a developer's real .env affect configuration tests."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
 def test_settings_default_values():
     """Test that default values are set correctly."""
     # Mock environment variables to avoid using actual values

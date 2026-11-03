@@ -27,15 +27,16 @@ class TestGeminiModel:
             # Mock the response
             mock_response = MagicMock()
             mock_response.text = "Generated text"
-            mock_client.models.generate_content.return_value = mock_response
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
             
             model = GeminiModel(api_key="test_key")
             result = await model.generate_text("Test prompt")
             
             assert result == "Generated text"
-            mock_client.models.generate_content.assert_called_once_with(
+            mock_client.aio.models.generate_content.assert_awaited_once_with(
                 model="gemini-3-pro-preview",
-                contents=["Test prompt"]
+                contents=["Test prompt"],
+                config={"max_output_tokens": 8000},
             )
 
     @pytest.mark.asyncio
@@ -46,7 +47,7 @@ class TestGeminiModel:
             mock_client_class.return_value = mock_client
             
             # Mock an exception
-            mock_client.models.generate_content.side_effect = Exception("API Error")
+            mock_client.aio.models.generate_content = AsyncMock(side_effect=Exception("API Error"))
             
             model = GeminiModel(api_key="test_key")
             result = await model.generate_text("Test prompt")
@@ -111,6 +112,8 @@ class TestCreateAIModel:
     def test_create_gemini_with_both_keys(self):
         """Test that Gemini is created when both API keys are available."""
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
+            mock_settings.return_value.ai_provider = "auto"
+            mock_settings.return_value.openai_api_key = ""
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = "anthropic_key"
             mock_settings.return_value.gemini_model = "gemini-3-pro-preview"
@@ -126,6 +129,8 @@ class TestCreateAIModel:
     def test_create_gemini_with_only_google_key(self):
         """Test that Gemini is created when only Google API key is available."""
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
+            mock_settings.return_value.ai_provider = "auto"
+            mock_settings.return_value.openai_api_key = ""
             mock_settings.return_value.google_api_key = "google_key"
             mock_settings.return_value.anthropic_api_key = ""
             mock_settings.return_value.gemini_model = "gemini-3-pro-preview"
@@ -141,6 +146,8 @@ class TestCreateAIModel:
     def test_create_claude_with_only_anthropic_key(self):
         """Test that Claude is created when only Anthropic API key is available."""
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
+            mock_settings.return_value.ai_provider = "auto"
+            mock_settings.return_value.openai_api_key = ""
             mock_settings.return_value.google_api_key = ""
             mock_settings.return_value.anthropic_api_key = "anthropic_key"
             mock_settings.return_value.claude_model = "claude-sonnet-4-20250514"
@@ -156,6 +163,8 @@ class TestCreateAIModel:
     def test_create_no_keys_raises_error(self):
         """Test that ValueError is raised when no API keys are available."""
         with patch("telegram_bot.services.ai_model.get_settings") as mock_settings:
+            mock_settings.return_value.ai_provider = "auto"
+            mock_settings.return_value.openai_api_key = ""
             mock_settings.return_value.google_api_key = ""
             mock_settings.return_value.anthropic_api_key = ""
             

@@ -157,9 +157,11 @@ The bot includes an intelligent speaker identification system:
    TELEGRAM_API_HASH=your_telegram_api_hash
    DEEPGRAM_API_KEY=your_deepgram_key
    
-   # AI Models (at least one required - Anthropic recommended)
+   # AI text models (at least one provider key required)
+   AI_PROVIDER=auto
    ANTHROPIC_API_KEY=your_anthropic_key
    GOOGLE_API_KEY=your_google_key
+   OPENAI_API_KEY=
 
    # Optional (defaults shown)
    MAX_FILE_SIZE_MB=2048
@@ -167,6 +169,9 @@ The bot includes an intelligent speaker identification system:
    DEEPGRAM_MODEL=nova-2
    CLAUDE_MODEL=claude-sonnet-4-5-20250929
    GEMINI_MODEL=gemini-3-pro-preview
+   OPENAI_MODEL=gpt-6.1-sol
+   OPENAI_REASONING_EFFORT=low
+   OPENAI_TIMEOUT_SECONDS=120
 
    # RAG (Retrieval Augmented Generation) for meeting search
    RAG_ENABLE_DEFAULT=false
@@ -226,8 +231,10 @@ The bot includes an intelligent speaker identification system:
 | `TELEGRAM_API_ID` | Telegram API ID from my.telegram.org | Required |
 | `TELEGRAM_API_HASH` | Telegram API Hash from my.telegram.org | Required |
 | `DEEPGRAM_API_KEY` | Deepgram API key for transcription | Required |
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models (default, recommended) | At least one required |
-| `GOOGLE_API_KEY` | Google API key for Gemini models (alternative) | At least one required |
+| `AI_PROVIDER` | Explicit `openai`, `gemini`, `claude`, or `auto` (Gemini > Claude > OpenAI by key presence) | auto |
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude text generation | Empty; selected provider key required |
+| `GOOGLE_API_KEY` | Google API key for Gemini text generation and optional RAG embeddings | Empty; selected provider key required |
+| `OPENAI_API_KEY` | Official OpenAI Platform project API key for text generation | Empty; selected provider key required |
 | `MAX_FILE_SIZE_MB` | Maximum file size in MB | 2048 (2GB) |
 | `TEMP_DIR` | Directory for temporary files | ./temp |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
@@ -238,6 +245,9 @@ The bot includes an intelligent speaker identification system:
 | `ENABLE_SMART_FORMAT` | Enable smart formatting | true |
 | `CLAUDE_MODEL` | Claude model to use | claude-sonnet-4-5-20250929 |
 | `GEMINI_MODEL` | Gemini model to use | gemini-3-pro-preview |
+| `OPENAI_MODEL` | OpenAI Responses API model (project access required) | gpt-6.1-sol |
+| `OPENAI_REASONING_EFFORT` | Reasoning effort: `low`, `medium`, `high`, `xhigh`, `max` (must also be supported by any alternate model) | low |
+| `OPENAI_TIMEOUT_SECONDS` | Absolute deadline including all attempts (maximum two transient retries) | 120 |
 | `RAG_ENABLE_DEFAULT` | Enable automatic RAG indexing for all transcripts | false |
 | `RAG_EMBEDDING_MODEL` | Gemini embedding model for RAG | text-embedding-004 |
 | `RAG_CHUNK_SIZE` | Size of text chunks for RAG indexing | 400 |
@@ -253,6 +263,36 @@ The bot includes an intelligent speaker identification system:
 | `STATE_SECRET` | JWT secret to sign OAuth state | Optional |
 | `BACKEND_BASE_URL` | Public base URL of FastAPI backend | Optional |
 | `ZOOM_DB_PATH` | Path to SQLite DB for Zoom integration | ./temp/zoom_integration.sqlite3 |
+
+### OpenAI text generation and billing
+
+Set `AI_PROVIDER=openai` and supply an official OpenAI Platform project key via
+`OPENAI_API_KEY`. This overrides other provider keys, including a deleted Gemini
+key still present in the environment. `auto` preserves the legacy Gemini/Claude
+priority and only selects OpenAI when neither earlier key is present; it does not
+test whether those keys work or switch providers silently after failures.
+
+The OpenAI integration uses the Responses API for summaries, speaker names,
+questions, diagrams, and RAG text generation. Audio transcription still uses
+Deepgram and its separate billing. Optional RAG embeddings still use Google and
+need a working `GOOGLE_API_KEY`; selecting OpenAI does not migrate embeddings.
+
+API keys charge the project/organization associated with that key, not a ChatGPT
+browser login. If your Pro account offers official API credits, first activate
+the offer and confirm the credit balance, eligible models, and expiration in the
+corresponding OpenAI Platform organization. See the [official subscription API-credit benefit](https://developers.openai.com/api/docs/guides/chatgpt-api-credits) for eligibility and activation. Then create/use a key from that
+organization. A Pro subscription alone does not establish that this project's
+API requests have credits available. Without applicable credits, ordinary paid
+API billing applies. This bot does not use ChatGPT/Codex session tokens or
+subscription-login proxies. Confirm billing and model access before a live test.
+Automated provider tests use mock HTTP transport; they do not verify any real
+account's credit activation, API key, or model access.
+
+Requests use `store=false`, a configurable total timeout, and at most two retries
+for transient failures. Authentication failures and exhausted quota are not
+retried. Incomplete, refused, and empty outputs return failure rather than a
+partial summary. Output limits include reasoning tokens, so a long transcript
+may require a larger caller limit or a different configured model.
 
 ### Docker services
 - `telegram-bot`: the Telegram bot process

@@ -1,5 +1,7 @@
 """Configuration settings for the Telegram bot."""
 
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +17,10 @@ class Settings(BaseSettings):
     deepgram_api_key: str = Field(alias="DEEPGRAM_API_KEY")
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    ai_provider: Literal["auto", "openai", "gemini", "claude"] = Field(
+        default="auto", alias="AI_PROVIDER"
+    )
 
     max_file_size_mb: int = Field(default=2048, alias="MAX_FILE_SIZE_MB")
     api_id: int = Field(alias="TELEGRAM_API_ID")
@@ -38,7 +44,7 @@ class Settings(BaseSettings):
     download_watchdog_interval_seconds: int = Field(
         default=10, alias="DOWNLOAD_WATCHDOG_INTERVAL_SECONDS"
     )
-    
+
     enable_diarization: bool = Field(default=True, alias="ENABLE_DIARIZATION")
     enable_punctuation: bool = Field(default=True, alias="ENABLE_PUNCTUATION")
     enable_paragraphs: bool = Field(default=True, alias="ENABLE_PARAGRAPHS")
@@ -50,6 +56,13 @@ class Settings(BaseSettings):
 
     gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
     claude_model: str = Field(default="claude-sonnet-4-5-20250929", alias="CLAUDE_MODEL")
+    openai_model: str = Field(default="gpt-6.1-sol", alias="OPENAI_MODEL")
+    openai_reasoning_effort: Literal["low", "medium", "high", "xhigh", "max"] = Field(
+        default="low", alias="OPENAI_REASONING_EFFORT"
+    )
+    openai_timeout_seconds: float = Field(
+        default=120.0, gt=0, le=3600, alias="OPENAI_TIMEOUT_SECONDS"
+    )
 
     enable_streaming: bool = Field(default=True, alias="ENABLE_STREAMING")
     memory_limit_mb: int = Field(default=512, alias="MEMORY_LIMIT_MB")

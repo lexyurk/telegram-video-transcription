@@ -1,11 +1,30 @@
 """Transcription service for handling Deepgram transcription."""
 
 import asyncio
-import aiofiles
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any, BinaryIO
+
 from deepgram import DeepgramClient
 from loguru import logger
 
 from telegram_bot.config import get_settings
+
+
+class _ReplayableFileBody:
+    """A bounded iterable that restarts when the SDK retries the HTTP request."""
+
+    def __init__(self, file: BinaryIO) -> None:
+        self.file = file
+
+    def fileno(self) -> int:
+        # Let HTTPX retain Content-Length rather than switch to chunked encoding.
+        return self.file.fileno()
+
+    def __iter__(self) -> Iterator[bytes]:
+        self.file.seek(0)
+        while chunk := self.file.read(65_536):
+            yield chunk
 
 
 class TranscriptionService:
@@ -21,6 +40,19 @@ class TranscriptionService:
         
         logger.info(f"Initialized Deepgram client with {self.timeout_seconds}s timeout")
 
+    def _transcribe_file_stream(self, file_path: str, **options: Any) -> Any:
+        """Keep file ownership in the worker until the synchronous upload finishes.
+
+        The SDK passes a replayable chunk iterable to HTTPX, so its existing
+        HTTP retries resend the whole file without buffering it in memory.
+        Opening here also avoids closing the file prematurely if the async caller
+        is cancelled while its worker is still sending the request.
+        """
+        with open(file_path, "rb") as audio_file:
+            return self.client.listen.v1.media.transcribe_file(
+                request=_ReplayableFileBody(audio_file), **options
+            )
+
     async def transcribe_audio(self, file_path: str) -> str | None:
         """
         Transcribe audio file using Deepgram with enhanced features.
@@ -35,22 +67,19 @@ class TranscriptionService:
         try:
             settings = get_settings()
 
-            async with aiofiles.open(file_path, "rb") as audio_file:
-                buffer_data = await audio_file.read()
-            
-            file_size_mb = len(buffer_data) / (1024 * 1024)
+            file_size = Path(file_path).stat().st_size
+            file_size_mb = file_size / (1024 * 1024)
             dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
             actual_timeout = min(dynamic_timeout, self.timeout_seconds)
 
-            logger.info(f"Starting enhanced transcription for file: {file_path} ({len(buffer_data)} bytes)")
+            logger.info(f"Starting enhanced transcription for file: {file_path} ({file_size} bytes)")
             logger.info(f"Features enabled: diarization={settings.enable_diarization}, punctuation={settings.enable_punctuation}, smart_format={settings.enable_smart_format}, paragraphs={settings.enable_paragraphs}")
             logger.info(f"File size: {file_size_mb:.1f}MB, Timeout: {actual_timeout}s")
 
             try:
-                # Deepgram SDK v5.3.0 API: pass request as bytes, options as kwargs
                 response = await asyncio.to_thread(
-                    self.client.listen.v1.media.transcribe_file,
-                    request=buffer_data,
+                    self._transcribe_file_stream,
+                    file_path,
                     model=settings.deepgram_model,
                     detect_language=True,
                     smart_format=settings.enable_smart_format,
@@ -351,16 +380,13 @@ class TranscriptionService:
         """
         try:
             settings = get_settings()
-            async with aiofiles.open(file_path, "rb") as audio_file:
-                buffer_data = await audio_file.read()
-            file_size_mb = len(buffer_data) / (1024 * 1024)
+            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
             dynamic_timeout = max(300, int(file_size_mb * 120) + 300)
             actual_timeout = min(dynamic_timeout, self.timeout_seconds)
             
-            # Deepgram SDK v5.3.0 API
             response = await asyncio.to_thread(
-                self.client.listen.v1.media.transcribe_file,
-                request=buffer_data,
+                self._transcribe_file_stream,
+                file_path,
                 model=settings.deepgram_model,
                 detect_language=True,
                 smart_format=settings.enable_smart_format,

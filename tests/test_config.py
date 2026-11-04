@@ -8,6 +8,12 @@ import pytest
 from telegram_bot.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def isolate_dotenv(monkeypatch):
+    """Never let a developer's real .env affect configuration tests."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
 def test_settings_default_values():
     """Test that default values are set correctly."""
     # Mock environment variables to avoid using actual values
@@ -20,6 +26,7 @@ def test_settings_default_values():
             "DEEPGRAM_API_KEY": "test_deepgram",
             "GOOGLE_API_KEY": "test_google",
         },
+        clear=True,
     ):
         settings = Settings()
         assert settings.max_file_size_mb == 2048
@@ -66,6 +73,7 @@ def test_settings_custom_values():
             "CLAUDE_MODEL": "claude-3.5-sonnet",
             "RAG_EMBEDDING_MODEL": "custom-embedding-model",
         },
+        clear=True,
     ):
         settings = Settings()
         assert settings.telegram_bot_token == "custom_token"
@@ -92,6 +100,7 @@ def test_ai_model_creation_gemini_priority():
             "GOOGLE_API_KEY": "test_google",
             "ANTHROPIC_API_KEY": "test_anthropic",
         },
+        clear=True,
     ):
         from telegram_bot.services.ai_model import create_ai_model, GeminiModel
         
@@ -110,6 +119,7 @@ def test_ai_model_creation_claude_fallback():
             "DEEPGRAM_API_KEY": "test_deepgram",
             "ANTHROPIC_API_KEY": "test_anthropic",
         },
+        clear=True,
     ):
         from telegram_bot.services.ai_model import create_ai_model, ClaudeModel
         
@@ -127,6 +137,7 @@ def test_ai_model_creation_no_keys():
             "TELEGRAM_API_HASH": "test_hash",
             "DEEPGRAM_API_KEY": "test_deepgram",
         },
+        clear=True,
     ):
         from telegram_bot.services.ai_model import create_ai_model
         

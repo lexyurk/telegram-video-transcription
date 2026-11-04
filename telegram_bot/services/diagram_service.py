@@ -1,14 +1,16 @@
 """Diagram service for creating diagrams from transcripts using pure Python."""
 
-import os
 import re
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
 from telegram_bot.services.ai_model import AIModel, create_ai_model
-from telegram_bot.services.python_diagram_generator import PythonDiagramGenerator
 from telegram_bot.services.diagram_data_extractor import DiagramDataExtractor
+
+
+if TYPE_CHECKING:
+    from telegram_bot.services.python_diagram_generator import PythonDiagramGenerator
 
 
 class DiagramService:
@@ -18,11 +20,24 @@ class DiagramService:
         """Initialize the diagram service."""
         self.ai_model = ai_model or create_ai_model()
         
-        # Initialize Python-based diagram generator
-        self.python_generator = PythonDiagramGenerator()
+        # Plotting dependencies are only needed when a diagram is requested.
+        self._python_generator: "PythonDiagramGenerator | None" = None
         self.data_extractor = DiagramDataExtractor(self.ai_model)
         
         logger.info("Diagram service initialized with Python-only generation")
+
+    @property
+    def python_generator(self) -> "PythonDiagramGenerator":
+        """Create and retain the optional plotting stack on first use."""
+        if self._python_generator is None:
+            from telegram_bot.services.python_diagram_generator import PythonDiagramGenerator
+
+            self._python_generator = PythonDiagramGenerator()
+        return self._python_generator
+
+    @python_generator.setter
+    def python_generator(self, generator: "PythonDiagramGenerator") -> None:
+        self._python_generator = generator
 
     async def _create_python_diagram(self, transcript: str, custom_prompt: Optional[str] = None) -> Optional[str]:
         """Create a diagram using Python-based generator."""
